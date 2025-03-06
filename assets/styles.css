@@ -1,0 +1,83 @@
+/* 학급 관계 네트워크 분석 시스템 커스텀 스타일 */
+
+/* 헤더 스타일 */
+.main-header {
+    font-size: 2.5rem;
+    color: #1E88E5;
+    margin-bottom: 1rem;
+    font-weight: bold;
+}
+
+.sub-header {
+    font-size: 1.5rem;
+    color: #0D47A1;
+    margin-top: 1.5rem;
+    margin-bottom: 0.8rem;
+    font-weight: bold;
+}
+
+/* 푸터 스타일 */
+.footer {
+    font-size: 0.8rem;
+    color: #666;
+    text-align: center;
+    margin-top: 2rem;
+    border-top: 1px solid #eee;
+    padding-top: 1rem;
+}
+
+/* 알림 스타일 */
+.stAlert {
+    background-color: #E3F2FD;
+    border-left: 5px solid #1E88E5;
+    padding: 1rem;
+}
+
+/* 버튼 스타일 */
+.stButton>button {
+    background-color: #1E88E5;
+    color: white;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font-weight: bold;
+}
+
+.stButton>button:hover {
+    background-color: #0D47A1;
+}
+
+/* 데이터프레임 스타일 */
+.dataframe {
+    font-size: 0.9rem;
+}
+
+/* 탭 스타일 */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    height: 50px;
+    white-space: pre-wrap;
+    background-color: #F5F5F5;
+    border-radius: 4px 4px 0 0;
+    gap: 1px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.stTabs [aria-selected="true"] {
+    background-color: #E3F2FD;
+    border-bottom: 2px solid #1E88E5;
+}
+
+/* 링크 스타일 */
+a {
+    color: #1E88E5;
+    text-decoration: none;
+}
+
+a:hover {
+    color: #0D47A1;
+    text-decoration: underline;
+} 

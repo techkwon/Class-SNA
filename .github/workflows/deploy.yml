@@ -1,0 +1,47 @@
+name: 'Streamlit Cloud 자동 배포'
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: '테스트 및 린팅'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 'Python 설정'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: '의존성 설치'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: 'Python 문법 검사'
+        run: |
+          pip install flake8
+          # 심각한 에러만 체크
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          
+  deploy:
+    name: '배포'
+    needs: test
+    # Streamlit Cloud가 GitHub 저장소 변경을 감지하면 자동으로 앱을 재배포함
+    # 이 작업은 단순히 테스트가 성공적으로 통과했음을 나타냄
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: '배포 준비 완료'
+        run: echo "테스트가 통과되었습니다. Streamlit Cloud에서 자동 배포가 시작됩니다."

@@ -1,0 +1,7 @@
+# Python
+__pycache__/
+*.py[cod]
+# 환경 변수
+.env
+# Streamlit 관련
+.streamlit/secrets.toml
