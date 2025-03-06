@@ -1,0 +1,7 @@
+[runner]
+# 파일 감시를 비활성화하여 inotify 제한 문제 해결
+fastReruns = false
+watchFileSystem = false
+
+[server]
+maxUploadSize = 200
