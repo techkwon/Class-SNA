@@ -23,60 +23,64 @@ warnings.filterwarnings("ignore", "Glyph .* missing from current font")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Streamlit Cloud 환경인지 확인하는 함수 - 전역 함수로 정의
+def is_streamlit_cloud():
+    """Streamlit Cloud 환경인지 확인"""
+    return os.getenv("STREAMLIT_RUNTIME") is not None or os.getenv("STREAMLIT_RUN_ON_SAVE") is not None
+
 # 한글 폰트 설정 함수
 def set_korean_font():
     """matplotlib에서 한글 폰트를 사용하도록 설정"""
     try:
-        # 운영체제 확인
+        # Streamlit Cloud 환경 확인 - 전역 함수 사용
+        if is_streamlit_cloud():
+            logger.info("Streamlit Cloud 환경이 감지되었습니다. 기본 폰트를 사용합니다.")
+            # 클라우드 환경에서는 폰트 설치를 시도하지 않음
+            
+            # 일반 폰트 중 한글 지원 가능성이 있는 폰트 시도
+            for font in ['Noto Sans', 'DejaVu Sans', 'Arial Unicode MS', 'Roboto']:
+                try:
+                    plt.rc('font', family=font)
+                    logger.info(f"{font} 폰트를 사용합니다.")
+                    break
+                except Exception as font_e:
+                    logger.debug(f"{font} 폰트 사용 실패: {str(font_e)}")
+                    continue
+                    
+            # 영문 폰트 사용 알림
+            logger.warning("Streamlit Cloud 환경에서는 한글 폰트가 제한될 수 있습니다. 영문 표기로 대체합니다.")
+            return
+            
+        # 운영체제별 폰트 설정 (로컬 환경)
         system = platform.system()
-        
         if system == 'Darwin':  # macOS
             plt.rc('font', family='AppleGothic')
             logger.info("macOS 환경에서 AppleGothic 폰트를 사용합니다.")
         elif system == 'Windows':  # Windows
             plt.rc('font', family='Malgun Gothic')
             logger.info("Windows 환경에서 Malgun Gothic 폰트를 사용합니다.")
-        else:  # Linux 등
-            # Streamlit Cloud 환경 확인
-            is_cloud = os.getenv("STREAMLIT_RUNTIME") is not None
+        else:  # Linux 등 (로컬에서만 설치 시도)
+            # 로컬 리눅스 환경인 경우에만 폰트 설치 시도
+            logger.info("로컬 Linux 환경이 감지되었습니다.")
             
-            if is_cloud:
-                # Streamlit Cloud에서는 시스템 명령 실행 권한이 없으므로 기본 폰트만 시도
-                logger.info("Streamlit Cloud 환경이 감지되었습니다. 기본 폰트를 사용합니다.")
-                # 폰트가 없으면 로마자 변환 사용 알림
-                logger.warning("Streamlit Cloud 환경에서는 한글 폰트가 제한될 수 있습니다. 영문 표기로 대체합니다.")
-                
-                # 일반 폰트 중 한글 지원 가능성이 있는 폰트 시도
-                for font in ['Noto Sans', 'DejaVu Sans', 'Arial Unicode MS']:
+            # 이미 설치된 폰트 먼저 확인
+            font_list = fm.findSystemFonts(fontpaths=None, fontext='ttf')
+            nanum_fonts = [f for f in font_list if 'Nanum' in f]
+            
+            if nanum_fonts:
+                # 나눔 폰트가 이미 설치되어 있는 경우
+                plt.rc('font', family='NanumGothic')
+                logger.info("나눔 폰트가 이미 설치되어 있습니다.")
+            else:
+                # 일반 폰트 시도
+                for font in ['Noto Sans', 'DejaVu Sans', 'Ubuntu']:
                     try:
                         plt.rc('font', family=font)
                         logger.info(f"{font} 폰트를 사용합니다.")
                         break
-                    except:
+                    except Exception as font_e:
+                        logger.debug(f"{font} 폰트 사용 실패: {str(font_e)}")
                         continue
-            else:
-                # 로컬 Linux 환경에서는 나눔 폰트 설치 시도
-                try:
-                    # 나눔 폰트 설치 (apt-get을 통해)
-                    logger.info("나눔 폰트 설치 시도...")
-                    os.system("apt-get update && apt-get install -y fonts-nanum")
-                    # 폰트 캐시 갱신
-                    os.system("fc-cache -fv")
-                    logger.info("나눔 폰트 설치 완료")
-                    
-                    # 폰트 경로 찾기
-                    font_list = fm.findSystemFonts(fontpaths=None, fontext='ttf')
-                    nanum_fonts = [f for f in font_list if 'Nanum' in f]
-                    
-                    if nanum_fonts:
-                        # 나눔 폰트 사용
-                        plt.rc('font', family='NanumGothic')
-                        logger.info("나눔 폰트를 사용합니다.")
-                    else:
-                        # 폰트 설치 시도했으나 찾지 못한 경우, 대체 방법 사용
-                        logger.warning("한글 폰트를 찾을 수 없습니다. 노드 레이블을 영문으로 변환합니다.")
-                except Exception as e:
-                    logger.warning(f"한글 폰트 설치 실패: {str(e)}")
         
         # 폰트 설정 확인
         plt.rc('axes', unicode_minus=False)  # 마이너스 기호 깨짐 방지
@@ -139,40 +143,48 @@ class NetworkVisualizer:
     """네트워크 그래프 시각화 클래스"""
     
     def __init__(self, analyzer):
+        """NetworkAnalyzer 객체를 받아 초기화"""
         self.analyzer = analyzer
         self.graph = analyzer.graph
+        
+        # 한글 폰트 설정 및 확인
+        set_korean_font()
+        self.has_korean_font = self._check_korean_font()
+        
+        # Streamlit Cloud 환경에서는 자동으로 로마자화 사용
+        if is_streamlit_cloud():
+            self.has_korean_font = False
+            logger.info("Streamlit Cloud 환경에서는 로마자화를 기본으로 사용합니다.")
+            
+        # 노드 이름 매핑 (원래 이름 -> 로마자화된 이름)
+        self.name_mapping = {}
+        if not self.has_korean_font:
+            for node in self.graph.nodes():
+                self.name_mapping[node] = romanize_korean(node)
+        
         self.communities = analyzer.communities
         self.metrics = analyzer.metrics
-        
-        # 한글 폰트 문제가 있는지 확인
-        self.has_korean_font = self._check_korean_font()
     
     def _check_korean_font(self):
-        """한글 폰트가 사용 가능한지 확인"""
+        """한글 폰트 사용 가능 여부 확인"""
+        # Streamlit Cloud 환경에서는 자동으로 False 반환
+        if is_streamlit_cloud():
+            logger.info("Streamlit Cloud 환경에서는 한글 폰트 체크를 건너뜁니다.")
+            return False
+            
         try:
-            # Streamlit Cloud 환경에서는 바로 False 반환
-            if os.getenv("STREAMLIT_RUNTIME") is not None:
-                logger.info("Streamlit Cloud 환경에서는 자동으로 로마자 변환을 사용합니다.")
-                return False
+            # 간단한 한글 텍스트로 시험해보기
+            fig, ax = plt.subplots(figsize=(1, 1))
+            ax.text(0.5, 0.5, "한글", fontsize=9)
             
-            # 로컬 환경에서 테스트
-            with warnings.catch_warnings(record=True) as recorded_warnings:
-                # 한글 폰트 테스트
-                fig, ax = plt.subplots(figsize=(1, 1))
-                ax.text(0.5, 0.5, '한글')
-                plt.close(fig)  # 테스트 후 닫기
-                
-                # 경고가 있는지 확인
-                for warning in recorded_warnings:
-                    if "missing from current font" in str(warning.message):
-                        logger.warning("한글 폰트 문제가 감지되었습니다.")
-                        return False
-            
-            # 경고가 없으면 한글 폰트 사용 가능
+            # 경고 없이 생성되면 한글 폰트 지원으로 간주
+            plt.close(fig)
             logger.info("한글 폰트 사용 가능 확인됨")
             return True
+            
         except Exception as e:
-            logger.warning(f"한글 폰트 확인 중 오류: {str(e)}")
+            logger.warning(f"한글 폰트 확인 실패: {str(e)}")
+            logger.warning("한글 폰트를 찾을 수 없습니다. 노드 레이블을 영문으로 변환합니다.")
             return False
     
     def _get_display_label(self, node_name, use_romanized=False):
