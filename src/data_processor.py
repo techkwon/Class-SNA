@@ -81,15 +81,34 @@ class DataProcessor:
                 logger.info(f"중괄호로 둘러싸인 JSON 추출 (길이: {len(json_text)})")
                 
                 # JSON 문자열 정제
-                # 후행 쉼표 제거
+                # 1. 후행 쉼표 제거
                 cleaned_json = re.sub(r',\s*}', '}', json_text)
                 cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
                 
-                # 누락된 쌍따옴표 처리
+                # 2. 누락된 쌍따옴표 처리
                 cleaned_json = re.sub(r'([{,]\s*)(\w+)(\s*:)', r'\1"\2"\3', cleaned_json)
                 
-                # 홑따옴표를 쌍따옴표로 변환
+                # 3. 홑따옴표를 쌍따옴표로 변환
                 cleaned_json = cleaned_json.replace("'", '"')
+                
+                # 4. 불완전한 JSON 처리 - 마지막 객체가 불완전한 경우
+                # 마지막 객체가 완전하지 않은 경우 (닫는 중괄호 누락)
+                if cleaned_json.count('{') > cleaned_json.count('}'):
+                    # 마지막 완전한 객체까지만 유지
+                    last_complete_obj = cleaned_json.rfind('},')
+                    if last_complete_obj > 0:
+                        cleaned_json = cleaned_json[:last_complete_obj+1] + ']}'
+                        logger.warning("불완전한 JSON 감지: 마지막 객체를 제거하고 JSON을 닫았습니다.")
+                
+                # 5. 불완전한 JSON 처리 - 마지막 배열이 불완전한 경우
+                # 마지막 배열이 완전하지 않은 경우 (닫는 대괄호 누락)
+                if cleaned_json.count('[') > cleaned_json.count(']'):
+                    # 마지막 완전한 배열까지만 유지하거나 닫는 대괄호 추가
+                    cleaned_json = cleaned_json + ']' * (cleaned_json.count('[') - cleaned_json.count(']'))
+                    logger.warning("불완전한 JSON 감지: 닫는 대괄호를 추가했습니다.")
+                
+                # 6. 이스케이프되지 않은 따옴표 처리
+                cleaned_json = re.sub(r'(?<!\\)"([^"]*?)(?<!\\)"', r'"\1"', cleaned_json)
                 
                 # 정제된 JSON 저장
                 st.session_state["cleaned_json"] = cleaned_json
@@ -101,6 +120,51 @@ class DataProcessor:
                     return cleaned_json
                 except json.JSONDecodeError as e:
                     logger.warning(f"정제된 JSON이 여전히 유효하지 않습니다: {str(e)}")
+                    
+                    # 7. 추가 정제 시도 - 특정 위치의 오류 수정
+                    error_msg = str(e)
+                    if "Expecting ',' delimiter" in error_msg:
+                        # 오류 위치 추출
+                        match = re.search(r'line (\d+) column (\d+)', error_msg)
+                        if match:
+                            line, col = int(match.group(1)), int(match.group(2))
+                            # 줄 단위로 분할
+                            json_lines = cleaned_json.split('\n')
+                            if 0 < line <= len(json_lines):
+                                # 문제가 있는 줄 수정 시도
+                                problem_line = json_lines[line-1]
+                                if col < len(problem_line):
+                                    # 콤마 누락 추정 위치에 콤마 추가
+                                    fixed_line = problem_line[:col] + ',' + problem_line[col:]
+                                    json_lines[line-1] = fixed_line
+                                    fixed_json = '\n'.join(json_lines)
+                                    
+                                    # 수정된 JSON 테스트
+                                    try:
+                                        json.loads(fixed_json)
+                                        logger.info("콤마 추가 후 JSON이 유효해졌습니다")
+                                        return fixed_json
+                                    except json.JSONDecodeError:
+                                        logger.warning("콤마 추가 시도 후에도 JSON이 유효하지 않습니다")
+                    
+                    # 8. 마지막 시도 - 관계 배열만 추출하여 새 JSON 구성
+                    relationships_pattern = r'"relationships"\s*:\s*\[([\s\S]*?)\]'
+                    rel_match = re.search(relationships_pattern, cleaned_json)
+                    if rel_match:
+                        rel_content = rel_match.group(1)
+                        # 불완전한 마지막 객체 제거
+                        if rel_content.strip().endswith(','):
+                            rel_content = rel_content.rstrip(',')
+                        
+                        # 새 JSON 구성
+                        minimal_json = '{"relationships": [' + rel_content + ']}'
+                        try:
+                            json.loads(minimal_json)
+                            logger.info("관계 배열만 추출하여 유효한 JSON 생성")
+                            return minimal_json
+                        except json.JSONDecodeError:
+                            logger.warning("관계 배열 추출 후에도 JSON이 유효하지 않습니다")
+                    
                     # 오류가 있지만 일단 정제된 JSON 반환 (이후 백업 로직 활용)
                     return cleaned_json
             
