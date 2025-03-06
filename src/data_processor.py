@@ -54,6 +54,11 @@ class DataProcessor:
     def extract_json_from_text(self, text):
         """텍스트에서 JSON 부분 추출 및 정제"""
         try:
+            original_text = text  # 원본 텍스트 저장
+            
+            # 디버그를 위해 원본 응답 저장
+            st.session_state["original_api_response"] = text
+            
             # 마크다운 코드 블록(```json) 처리
             if "```json" in text or "```" in text:
                 # 코드 블록 내용 추출
@@ -63,45 +68,56 @@ class DataProcessor:
                 if code_blocks:
                     # 가장 큰 코드 블록 선택 (일반적으로 전체 JSON)
                     text = max(code_blocks, key=len)
-                    logger.info("마크다운 코드 블록에서 JSON 추출 성공")
+                    logger.info(f"마크다운 코드 블록에서 JSON 추출 성공 (길이: {len(text)})")
+                    st.session_state["extracted_code_block"] = text
             
-            # 정규식을 사용하여 중괄호로 둘러싸인 유효한 JSON 객체를 찾습니다.
-            json_pattern = r'(\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\})'
-            matches = re.findall(json_pattern, text)
+            # JSON 시작과 끝 찾기 (중괄호로 둘러싸인 부분)
+            json_start = text.find('{')
+            json_end = text.rfind('}') + 1
             
-            if not matches:
-                # JSON 객체를 찾을 수 없는 경우
-                logger.error("API 응답에서 JSON 객체를 찾을 수 없습니다.")
-                st.error("API 응답에서 유효한 JSON을 찾을 수 없습니다. 다시 시도해주세요.")
+            # 유효한 JSON 범위가 있는 경우
+            if json_start >= 0 and json_end > json_start:
+                json_text = text[json_start:json_end]
+                logger.info(f"중괄호로 둘러싸인 JSON 추출 (길이: {len(json_text)})")
                 
-                # 원본 응답 로깅 및 UI에 표시
-                logger.error(f"원본 응답: {text[:1000]}...")
-                st.code(text[:1000] + "..." if len(text) > 1000 else text, language="text")
+                # JSON 문자열 정제
+                # 후행 쉼표 제거
+                cleaned_json = re.sub(r',\s*}', '}', json_text)
+                cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
                 
-                raise ValueError("API 응답에서 유효한 JSON을 찾을 수 없습니다.")
+                # 누락된 쌍따옴표 처리
+                cleaned_json = re.sub(r'([{,]\s*)(\w+)(\s*:)', r'\1"\2"\3', cleaned_json)
                 
-            # 가장 큰 JSON 객체를 선택 (일반적으로 전체 응답)
-            largest_match = max(matches, key=len)
+                # 홑따옴표를 쌍따옴표로 변환
+                cleaned_json = cleaned_json.replace("'", '"')
+                
+                # 정제된 JSON 저장
+                st.session_state["cleaned_json"] = cleaned_json
+                
+                # 파싱 테스트
+                try:
+                    json.loads(cleaned_json)
+                    logger.info("정제된 JSON이 유효합니다")
+                    return cleaned_json
+                except json.JSONDecodeError as e:
+                    logger.warning(f"정제된 JSON이 여전히 유효하지 않습니다: {str(e)}")
+                    # 오류가 있지만 일단 정제된 JSON 반환 (이후 백업 로직 활용)
+                    return cleaned_json
             
-            # 일반적인 JSON 구문 오류 수정 시도
-            # 후행 쉼표 제거
-            cleaned_json = re.sub(r',\s*}', '}', largest_match)
-            cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
+            # JSON 객체를 찾을 수 없는 경우, 원본 텍스트에서 직접 관계 추출 시도
+            logger.warning("정규 JSON 객체를 찾지 못했습니다. 원본 응답에서 직접 관계 추출을 시도합니다.")
             
-            # 누락된 쌍따옴표 처리
-            cleaned_json = re.sub(r'([{,]\s*)(\w+)(\s*:)', r'\1"\2"\3', cleaned_json)
-            
-            # 홑따옴표를 쌍따옴표로 변환
-            cleaned_json = cleaned_json.replace("'", '"')
-            
-            return cleaned_json
+            # 원본 텍스트를 그대로 반환 (이후 백업 로직에서 처리)
+            return original_text
             
         except Exception as e:
             logger.error(f"JSON 추출 실패: {str(e)}")
             logger.error(traceback.format_exc())
             st.error(f"JSON 추출 중 오류가 발생했습니다: {str(e)}")
             st.code(text[:1000] + "..." if len(text) > 1000 else text, language="text")
-            raise ValueError(f"JSON 추출 중 오류가 발생했습니다: {str(e)}")
+            
+            # 오류가 발생해도 원본 텍스트 반환 (이후 백업 로직에서 처리)
+            return text
     
     def analyze_data_structure(self, df):
         """설문조사 데이터 구조 분석"""
@@ -120,7 +136,7 @@ class DataProcessor:
             logger.info(f"Gemini API 응답: {analysis_result[:1000]}...")
             
             # 디버그 정보를 UI에 표시
-            with st.expander("디버그: Gemini API 응답 (개발자용)", expanded=False):
+            with st.expander("디버그: API 응답 (개발자용)", expanded=False):
                 st.text_area("원본 응답:", value=analysis_result, height=200)
             
             # JSON 문자열 추출 및 정제
@@ -130,46 +146,77 @@ class DataProcessor:
             with st.expander("디버그: 추출된 JSON (개발자용)", expanded=False):
                 st.text_area("정제된 JSON:", value=json_str, height=200)
             
+            # 결과 객체 변수 초기화
+            result = {"relationships": [], "students": []}
+            
+            # JSON 파싱 시도
             try:
-                # JSON 파싱 시도
-                result = json.loads(json_str)
+                # 정제된 JSON 파싱 시도
+                parsed_json = json.loads(json_str)
                 logger.info("JSON 파싱 성공")
-            except json.JSONDecodeError as e:
-                # JSON 파싱 실패 시 오류 표시 및 디버깅 정보 제공
-                logger.error(f"JSON 파싱 실패: {str(e)}")
-                st.error(f"""
-                AI 응답에서 유효한 JSON을 파싱하지 못했습니다.
-                다시 시도해보세요. 오류 메시지: {str(e)}
-                """)
-                st.code(json_str[:500] + "..." if len(json_str) > 500 else json_str, language="json")
                 
-                # 백업 로직: 예제 구조 생성
-                if "relationships" in analysis_result and "from" in analysis_result and "to" in analysis_result:
-                    st.warning("JSON 파싱은 실패했지만, API 응답에서 관계 데이터를 추출하려고 시도합니다.")
-                    
-                    # 간단한 패턴 매칭으로 관계 추출 시도
-                    rel_pattern = r'{"from":\s*"([^"]+)",\s*"to":\s*"([^"]+)"'
-                    relationships = []
-                    
-                    for match in re.finditer(rel_pattern, analysis_result):
-                        from_student, to_student = match.groups()
-                        relationships.append({
-                            "from": from_student,
-                            "to": to_student,
-                            "weight": 1,
-                            "type": "relationship"
-                        })
-                    
-                    if relationships:
-                        logger.info(f"백업 로직으로 {len(relationships)}개의 관계를 추출했습니다.")
-                        result = {
-                            "relationships": relationships,
-                            "students": list(set([r["from"] for r in relationships] + [r["to"] for r in relationships]))
-                        }
-                    else:
-                        raise
+                # 파싱된 JSON에 필요한 키가 있는지 확인
+                if "relationships" in parsed_json and parsed_json["relationships"]:
+                    result = parsed_json  # 파싱 결과 사용
+                    logger.info(f"유효한 relationships 키가 발견되었습니다. {len(parsed_json['relationships'])}개의 관계가 있습니다.")
                 else:
-                    raise
+                    logger.warning("파싱된 JSON에 유효한 relationships 키가 없습니다. 직접 관계 추출을 시도합니다.")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON 파싱 실패: {str(e)}")
+                st.warning(f"JSON 파싱에 실패했습니다. 대안적인 방법으로 데이터 추출을 시도합니다.")
+            
+            # 백업 로직: API 응답에서 직접 관계 추출
+            if not result.get("relationships"):
+                st.info("API 응답에서 직접 관계 데이터를 추출하고 있습니다.")
+                
+                # 정규식 패턴 - 다양한 형식 지원
+                patterns = [
+                    # 기본 {"from": "학생명", "to": "학생명"} 패턴
+                    r'{"from":\s*"([^"]+)",\s*"to":\s*"([^"]+)"',
+                    # 확장 패턴 - 쉼표와 콜론 주변 공백 다양하게 처리
+                    r'{\s*"from"\s*:\s*"([^"]+)"\s*,\s*"to"\s*:\s*"([^"]+)"',
+                    # 속성 순서가 다른 경우 처리
+                    r'{\s*"to"\s*:\s*"([^"]+)"\s*,\s*"from"\s*:\s*"([^"]+)"',
+                ]
+                
+                relationships = []
+                for pattern in patterns:
+                    matches = re.finditer(pattern, analysis_result)
+                    for match in matches:
+                        if pattern.startswith(r'{\s*"to"'):
+                            # to, from 순서로 그룹이 있는 패턴
+                            to_student, from_student = match.groups()
+                        else:
+                            # from, to 순서로 그룹이 있는 패턴
+                            from_student, to_student = match.groups()
+                        
+                        # 중복 제거를 위한 키 생성
+                        rel_key = f"{from_student}-{to_student}"
+                        
+                        # 이미 추가된 관계인지 확인
+                        existing_keys = [f"{r['from']}-{r['to']}" for r in relationships]
+                        if rel_key not in existing_keys:
+                            relationships.append({
+                                "from": from_student,
+                                "to": to_student,
+                                "weight": 1,
+                                "type": "relationship"
+                            })
+                
+                # 추출된 관계가 있으면 result 업데이트
+                if relationships:
+                    logger.info(f"직접 추출로 {len(relationships)}개의 관계를 찾았습니다.")
+                    result["relationships"] = relationships
+                    
+                    # 학생 목록도 관계에서 추출
+                    students = set()
+                    for rel in relationships:
+                        students.add(rel["from"])
+                        students.add(rel["to"])
+                    result["students"] = list(students)
+                    logger.info(f"관계에서 {len(students)}명의 학생을 추출했습니다.")
+                else:
+                    logger.warning("API 응답에서 관계를 추출할 수 없습니다.")
             
             # 필수 키 확인 및 추가
             required_keys = ["relationships", "students"]
@@ -191,12 +238,29 @@ class DataProcessor:
                     else:
                         result[key] = []
             
+            # 최종 결과 확인
+            if not result["relationships"]:
+                st.error("모든 방법을 시도했지만 관계 데이터를 추출할 수 없습니다.")
+                raise ValueError("관계 데이터를 추출할 수 없습니다. API 응답을 확인해주세요.")
+            
+            # 디버그: 최종 결과 구조 표시
+            with st.expander("디버그: 최종 데이터 구조 (개발자용)", expanded=False):
+                st.write("관계 수:", len(result["relationships"]))
+                st.write("학생 수:", len(result["students"]))
+                st.json({"relationships_sample": result["relationships"][:5], "students_sample": result["students"][:5]})
+            
             return result
             
         except Exception as e:
             logger.error(f"데이터 구조 분석 실패: {str(e)}")
             # 사용자에게 이해하기 쉬운 오류 메시지 제공
             st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
+            
+            # 디버그 정보 표시
+            if "original_api_response" in st.session_state:
+                with st.expander("디버그: 원본 API 응답", expanded=True):
+                    st.text_area("원본 응답:", value=st.session_state["original_api_response"], height=200)
+            
             raise Exception(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
     
     def convert_to_network_data(self, analysis_result):
