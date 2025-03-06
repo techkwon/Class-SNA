@@ -99,20 +99,20 @@ class APIManager:
         1. 관계형 질문(예: "함께 일하고 싶은 친구는?", "도움을 요청할 친구는?")을 식별하세요.
         2. 응답자(From)와 선택된 학생(To) 간의 관계를 추출하세요.
         3. 학생 이름의 불일치나 오타를 수정하세요.
-        4. 다음 JSON 형식으로 결과를 반환하세요:
+        4. 다음 JSON
         ```json
-        {
+        {{
             "relationships": [
-                {"from": "학생1", "to": "학생2", "weight": 1, "type": "friendship"},
+                {{"from": "학생1", "to": "학생2", "weight": 1, "type": "friendship"}},
                 ...
             ],
             "students": ["학생1", "학생2", "학생3", ...],
-            "question_types": {
+            "question_types": {{
                 "question1": "friendship",
                 "question2": "academic",
                 ...
-            }
-        }
+            }}
+        }}
         ```
         
         결과는 반드시 유효한 JSON 형식이어야 하며, 불확실한 데이터는 포함하지 마세요.
