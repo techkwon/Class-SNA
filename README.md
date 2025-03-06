@@ -25,10 +25,11 @@
    pip install -r requirements.txt
    ```
 
-3. 환경 변수 설정:
-   `.env` 파일을 생성하고 Google API 키를 추가합니다:
-   ```
-   GOOGLE_API_KEYS=key1,key2,key3,...
+3. API 키 설정:
+   - `.streamlit/secrets.example.toml` 파일을 복사하여 `.streamlit/secrets.toml` 파일을 생성합니다.
+   - 파일을 열고 `google_api_keys` 변수에 Google Gemini API 키를 입력합니다(쉼표로 구분).
+   ```toml
+   google_api_keys = "키1,키2,키3,..."
    ```
 
 4. 앱 실행:
@@ -37,6 +38,19 @@
    ```
 
 ### Streamlit Cloud에서 사용하기
+
+1. GitHub 저장소를 Streamlit Cloud에 연결합니다.
+2. API 키 설정:
+   - Streamlit Cloud 대시보드에서 앱 설정으로 이동합니다.
+   - 'Secrets' 섹션에서 다음 내용을 추가합니다:
+   ```toml
+   google_api_keys = "키1,키2,키3,..."
+   ```
+   또는
+   ```toml
+   google_api_keys = ["키1", "키2", "키3", ...]
+   ```
+3. 앱을 배포하면 자동으로 설정된 API 키를 사용합니다.
 
 [https://class-sna.streamlit.app](https://class-sna.streamlit.app) 링크를 통해 직접 접속하여 사용할 수 있습니다.
 

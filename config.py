@@ -1,32 +1,37 @@
 import os
 import random
-from dotenv import load_dotenv
+import streamlit as st
 
-# .env 파일에서 환경 변수 로드
-load_dotenv()
-
-# API 키 목록
-API_KEYS = [
-    "AIzaSyD2UzkUP2jxjwzAc3eSZkq9CR1Rrk0szJQ",
-    "AIzaSyCv3YJc4QiJtlhymRqpo0rirH3ploC0yR8",
-    "AIzaSyB_KV2WIdo21usPYRAUXnlyHIrq9qV2Hzo",
-    "AIzaSyDwj5tIYg8X5ASilXiqKnpxrScRdZ1QAUs",
-    "AIzaSyDS8RQWjEgB_9pmLUvaAeMoxxYBduVeyJQ",
-    "AIzaSyCsExDCjCLZjMHdRaIjo9wZZ_qd9SA-9Es",
-    "AIzaSyBltJa9K3bDpbulMvNoWL6OlrUjvfNNIGY",
-    "AIzaSyBqmvWg6HOREWX00h3udxF5HwbquF5qIEU",
-    "AIzaSyD0UW-mslCxaqMBKAN_AX6C0xhofKaRoLk",
-    "AIzaSyAc6I3KtFKFnVJ11JvRtVlYbtaw76siC5I"
-]
-
-# 환경 변수에서 API 키를 가져옴 (있는 경우)
-env_api_keys = os.getenv("GOOGLE_API_KEYS")
-if env_api_keys:
-    API_KEYS = env_api_keys.split(",")
+# Streamlit secrets에서 API 키 가져오기
+def get_api_keys():
+    """Streamlit secrets에서 API 키 목록 가져오기"""
+    try:
+        # Streamlit Cloud/로컬 환경에서 secrets에서 API 키 가져오기
+        if "google_api_keys" in st.secrets:
+            # 문자열로 저장된 경우 쉼표로 구분하여 리스트로 변환
+            if isinstance(st.secrets["google_api_keys"], str):
+                return st.secrets["google_api_keys"].split(",")
+            # 리스트로 저장된 경우 그대로 반환
+            elif isinstance(st.secrets["google_api_keys"], list):
+                return st.secrets["google_api_keys"]
+            else:
+                return []
+        else:
+            # 개발 환경에서는 환경 변수에서 가져오기 (fallback)
+            env_api_keys = os.getenv("GOOGLE_API_KEYS")
+            if env_api_keys:
+                return env_api_keys.split(",")
+            return []
+    except Exception as e:
+        print(f"API 키 로드 중 오류 발생: {str(e)}")
+        return []
 
 def get_random_api_key():
     """사용 가능한 API 키 중 하나를 랜덤으로 반환"""
-    return random.choice(API_KEYS)
+    api_keys = get_api_keys()
+    if not api_keys:
+        raise ValueError("사용 가능한 API 키가 없습니다. Streamlit secrets에 'google_api_keys' 설정이 필요합니다.")
+    return random.choice(api_keys)
 
 # Streamlit Cloud 환경 확인
 def is_streamlit_cloud():

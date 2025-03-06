@@ -5,3 +5,4 @@ __pycache__/
 .env
 # Streamlit 관련
 .streamlit/secrets.toml
+.streamlit/secrets.toml

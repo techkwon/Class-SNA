@@ -1,6 +1,7 @@
 import google.generativeai as genai
 import logging
 import time
+import streamlit as st
 from config import get_random_api_key, APP_SETTINGS
 
 # 로깅 설정
@@ -17,18 +18,40 @@ class APIManager:
     
     def setup_api(self):
         """API 키 설정 및 Gemini 모델 초기화"""
-        self.current_api_key = get_random_api_key()
-        genai.configure(api_key=self.current_api_key)
-        logger.info(f"API 설정 완료: 모델 {self.model} 사용")
+        try:
+            self.current_api_key = get_random_api_key()
+            genai.configure(api_key=self.current_api_key)
+            logger.info(f"API 설정 완료: 모델 {self.model} 사용")
+        except ValueError as e:
+            logger.error(f"API 설정 실패: {str(e)}")
+            # Streamlit UI에 오류 메시지 표시
+            st.error(f"""
+            API 키 설정 오류: {str(e)}
+            
+            Streamlit Cloud에서 실행하는 경우 다음과 같이 secrets를 설정해주세요:
+            1. Streamlit Cloud의 앱 설정에서 'Secrets' 섹션으로 이동
+            2. 다음 내용을 추가하세요:
+            ```toml
+            [general]
+            google_api_keys = ["키1", "키2", "키3", ...]
+            # 또는
+            google_api_keys = "키1,키2,키3,..."
+            ```
+            """)
+            raise
     
     def switch_api_key(self):
         """다른 API 키로 전환"""
         previous_key = self.current_api_key
-        while self.current_api_key == previous_key:
-            self.current_api_key = get_random_api_key()
-        
-        genai.configure(api_key=self.current_api_key)
-        logger.info("새로운 API 키로 전환 완료")
+        try:
+            while self.current_api_key == previous_key:
+                self.current_api_key = get_random_api_key()
+            
+            genai.configure(api_key=self.current_api_key)
+            logger.info("새로운 API 키로 전환 완료")
+        except ValueError as e:
+            logger.error(f"API 키 전환 실패: {str(e)}")
+            raise
     
     def generate_response(self, prompt, max_retries=3):
         """Gemini API를 사용하여 응답 생성"""
@@ -46,8 +69,13 @@ class APIManager:
                 
                 if retries < max_retries:
                     logger.info(f"API 키 전환 후 {retries}/{max_retries} 재시도 중...")
-                    self.switch_api_key()
-                    time.sleep(1)  # 재시도 전 대기
+                    try:
+                        self.switch_api_key()
+                        time.sleep(1)  # 재시도 전 대기
+                    except ValueError:
+                        # API 키가 없는 경우
+                        st.error("API 키가 설정되지 않았습니다. Streamlit secrets에 'google_api_keys' 설정이 필요합니다.")
+                        raise
                 else:
                     logger.error("최대 재시도 횟수 초과")
                     raise Exception("API 요청 실패. 잠시 후 다시 시도해주세요.")
