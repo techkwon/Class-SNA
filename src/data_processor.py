@@ -1,7 +1,9 @@
 import pandas as pd
 import json
+import re
 import logging
 import gspread
+import traceback
 from google.oauth2.service_account import Credentials
 from google.oauth2 import service_account
 from google.auth.transport.requests import Request
@@ -49,6 +51,40 @@ class DataProcessor:
             logger.error(f"구글 시트 데이터 로드 실패: {str(e)}")
             raise Exception(f"구글 시트 데이터를 가져오는 중 오류가 발생했습니다: {str(e)}")
     
+    def extract_json_from_text(self, text):
+        """텍스트에서 JSON 부분 추출 및 정제"""
+        try:
+            # 정규식을 사용하여 중괄호로 둘러싸인 유효한 JSON 객체를 찾습니다.
+            json_pattern = r'(\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\})'
+            matches = re.findall(json_pattern, text)
+            
+            if not matches:
+                # JSON 객체를 찾을 수 없는 경우
+                logger.error("API 응답에서 JSON 객체를 찾을 수 없습니다.")
+                st.error("API 응답에서 유효한 JSON을 찾을 수 없습니다. 다시 시도해주세요.")
+                raise ValueError("API 응답에서 유효한 JSON을 찾을 수 없습니다.")
+                
+            # 가장 큰 JSON 객체를 선택 (일반적으로 전체 응답)
+            largest_match = max(matches, key=len)
+            
+            # 일반적인 JSON 구문 오류 수정 시도
+            # 후행 쉼표 제거
+            cleaned_json = re.sub(r',\s*}', '}', largest_match)
+            cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
+            
+            # 누락된 쌍따옴표 처리
+            cleaned_json = re.sub(r'([{,]\s*)(\w+)(\s*:)', r'\1"\2"\3', cleaned_json)
+            
+            # 홑따옴표를 쌍따옴표로 변환
+            cleaned_json = cleaned_json.replace("'", '"')
+            
+            return cleaned_json
+            
+        except Exception as e:
+            logger.error(f"JSON 추출 실패: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise ValueError(f"JSON 추출 중 오류가 발생했습니다: {str(e)}")
+    
     def analyze_data_structure(self, df):
         """설문조사 데이터 구조 분석"""
         try:
@@ -62,17 +98,32 @@ class DataProcessor:
             # Gemini API를 사용하여 데이터 구조 분석
             analysis_result = self.api_manager.analyze_survey_data(data_str, questions_str)
             
-            # JSON 문자열에서 실제 JSON 부분만 추출
-            json_start = analysis_result.find('{')
-            json_end = analysis_result.rfind('}') + 1
+            # 디버그 정보 로깅 (개발 중에만 활성화)
+            logger.debug(f"Gemini API 응답: {analysis_result[:500]}...")
             
-            if json_start == -1 or json_end == 0:
-                raise ValueError("API 응답에서 유효한 JSON을 찾을 수 없습니다.")
-                
-            json_str = analysis_result[json_start:json_end]
+            # JSON 문자열 추출 및 정제
+            json_str = self.extract_json_from_text(analysis_result)
             
-            # JSON 파싱
-            result = json.loads(json_str)
+            try:
+                # JSON 파싱 시도
+                result = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                # JSON 파싱 실패 시 오류 표시 및 디버깅 정보 제공
+                logger.error(f"JSON 파싱 실패: {str(e)}")
+                st.error(f"""
+                AI 응답에서 유효한 JSON을 파싱하지 못했습니다.
+                다시 시도해보세요. 오류 메시지: {str(e)}
+                """)
+                st.code(json_str[:500] + "..." if len(json_str) > 500 else json_str, language="json")
+                raise
+            
+            # 필수 키 확인
+            required_keys = ["relationships", "students"]
+            for key in required_keys:
+                if key not in result:
+                    logger.warning(f"결과에 필수 키 '{key}'가 없습니다.")
+                    result[key] = []
+            
             return result
             
         except Exception as e:
@@ -90,6 +141,16 @@ class DataProcessor:
             
             # 엣지(관계) 데이터프레임 생성
             edges_df = pd.DataFrame(relationships)
+            
+            # 필수 열 확인
+            required_columns = ["from", "to"]
+            for col in required_columns:
+                if col not in edges_df.columns:
+                    raise ValueError(f"관계 데이터에 필수 열 '{col}'이 없습니다.")
+            
+            # 기본 가중치 추가 (없는 경우)
+            if "weight" not in edges_df.columns:
+                edges_df["weight"] = 1
             
             # 노드 데이터프레임 생성
             nodes_df = pd.DataFrame({"id": nodes, "label": nodes})
