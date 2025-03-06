@@ -9,6 +9,8 @@ import tempfile
 import os
 import logging
 import streamlit as st
+import base64
+from io import BytesIO
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -224,11 +226,36 @@ class NetworkVisualizer:
             # 임시 HTML 파일 생성
             with tempfile.NamedTemporaryFile(delete=False, suffix='.html') as tmpfile:
                 net.save_graph(tmpfile.name)
-                return tmpfile.name
+                
+                # HTML 파일을 읽어 데이터 URI로 변환
+                with open(tmpfile.name, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+                
+                # 워크어라운드: streamlit.components.v1이 없을 경우, iframe을 사용하여 표시
+                try:
+                    # streamlit.components.v1이 있으면 사용
+                    import streamlit.components.v1 as components
+                    return tmpfile.name
+                except (ImportError, AttributeError):
+                    # 없으면 임시 방편으로 iframe으로 처리
+                    logger.warning("streamlit.components.v1 모듈을 가져올 수 없습니다. 대체 방법을 사용합니다.")
+                    
+                    # HTML 내용을 base64로 인코딩
+                    encoded_html = base64.b64encode(html_content.encode()).decode()
+                    
+                    # iframe 방식으로 데이터 URI 생성
+                    st.markdown(f"### 인터랙티브 네트워크 그래프")
+                    st.warning("시각화 컴포넌트가 제한된 환경에서 실행 중입니다. HTML 다운로드 기능을 이용해 네트워크 그래프를 확인하세요.")
+                    
+                    # 다운로드 링크 제공
+                    st.markdown(f'<a href="data:text/html;base64,{encoded_html}" download="network_graph.html">인터랙티브 네트워크 HTML 다운로드</a>', unsafe_allow_html=True)
+                    
+                    return tmpfile.name
             
         except Exception as e:
             logger.error(f"PyVis 네트워크 그래프 생성 실패: {str(e)}")
-            raise Exception(f"네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
+            st.error(f"인터랙티브 네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
+            return None
     
     def create_centrality_plot(self, metric="in_degree", top_n=10):
         """중심성 지표 막대 그래프 생성"""

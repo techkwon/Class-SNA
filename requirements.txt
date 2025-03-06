@@ -11,4 +11,7 @@ python-louvain==0.16
 python-dotenv==1.0.0
 google-generativeai==0.4.0
 Pillow==10.2.0
-requests==2.31.0 
+requests==2.31.0
+openpyxl==3.1.2
+kaleido==0.2.1
+xlsxwriter==3.1.9 

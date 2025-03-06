@@ -89,11 +89,20 @@ class ReportGenerator:
                 st.write("#### 인터랙티브 네트워크 (드래그하여 조작 가능)")
                 pyvis_path = self.visualizer.create_pyvis_network()
                 
-                # HTML 파일 표시
-                with open(pyvis_path, 'r', encoding='utf-8') as f:
-                    html_data = f.read()
-                
-                st.components.v1.html(html_data, height=500)
+                if pyvis_path:
+                    # components.v1 모듈 사용 시도
+                    try:
+                        # HTML 파일 표시
+                        with open(pyvis_path, 'r', encoding='utf-8') as f:
+                            html_data = f.read()
+                        
+                        import streamlit.components.v1 as components
+                        components.html(html_data, height=500)
+                    except (ImportError, AttributeError):
+                        # 대체 방법: 이미 visualizer에서 링크가 제공되었을 것입니다
+                        st.info("인터랙티브 네트워크를 보려면 위의 다운로드 링크를 사용하세요.")
+                else:
+                    st.warning("인터랙티브 네트워크 생성에 실패했습니다.")
             
             with tab2:
                 # 중심성 지표 시각화
@@ -193,22 +202,40 @@ class ReportGenerator:
                 # Plotly 그래프 내보내기
                 fig = self.visualizer.create_plotly_network()
                 
-                # 이미지 버퍼에 저장
-                img_bytes = BytesIO()
-                fig.write_image(img_bytes, format='png', width=1200, height=800)
-                img_bytes.seek(0)
-                
-                # 다운로드 링크 생성
-                b64 = base64.b64encode(img_bytes.read()).decode()
-                st.markdown(f'<a href="data:image/png;base64,{b64}" download="network_graph.png">네트워크 그래프 PNG 다운로드</a>', unsafe_allow_html=True)
+                try:
+                    # kaleido 패키지 필요
+                    import kaleido
+                    
+                    # 이미지 버퍼에 저장
+                    img_bytes = BytesIO()
+                    fig.write_image(img_bytes, format='png', width=1200, height=800)
+                    img_bytes.seek(0)
+                    
+                    # 다운로드 링크 생성
+                    b64 = base64.b64encode(img_bytes.read()).decode()
+                    st.markdown(f'<a href="data:image/png;base64,{b64}" download="network_graph.png">네트워크 그래프 PNG 다운로드</a>', unsafe_allow_html=True)
+                except ImportError:
+                    # kaleido가 없으면 안내 메시지 표시
+                    st.warning("이미지 내보내기를 위해 kaleido 패키지가 필요합니다. `pip install kaleido` 명령으로 설치할 수 있습니다.")
+                    # 대안으로 JSON 형식 제공
+                    json_str = fig.to_json()
+                    json_b64 = base64.b64encode(json_str.encode()).decode()
+                    st.markdown(f'<a href="data:application/json;base64,{json_b64}" download="network_graph.json">네트워크 그래프 JSON 다운로드</a>', unsafe_allow_html=True)
                 
                 # PyVis HTML 다운로드
                 pyvis_path = self.visualizer.create_pyvis_network()
-                with open(pyvis_path, 'r', encoding='utf-8') as f:
-                    html_content = f.read()
-                
-                html_b64 = base64.b64encode(html_content.encode()).decode()
-                st.markdown(f'<a href="data:text/html;base64,{html_b64}" download="interactive_network.html">인터랙티브 네트워크 HTML 다운로드</a>', unsafe_allow_html=True)
+                if pyvis_path:
+                    try:
+                        with open(pyvis_path, 'r', encoding='utf-8') as f:
+                            html_content = f.read()
+                        
+                        html_b64 = base64.b64encode(html_content.encode()).decode()
+                        st.markdown(f'<a href="data:text/html;base64,{html_b64}" download="interactive_network.html">인터랙티브 네트워크 HTML 다운로드</a>', unsafe_allow_html=True)
+                    except Exception as e:
+                        logger.error(f"HTML 파일 읽기 실패: {str(e)}")
+                        st.warning("인터랙티브 네트워크 HTML 생성에 실패했습니다.")
+                else:
+                    st.warning("인터랙티브 네트워크 생성에 실패했습니다.")
             
             return True
             

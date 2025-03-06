@@ -42,8 +42,22 @@ def export_to_excel(network_data, analysis_results, filename="network_analysis.x
         # BytesIO 객체 생성
         output = BytesIO()
         
+        # 엔진 선택 (openpyxl 또는 xlsxwriter)
+        try:
+            import openpyxl
+            engine = 'openpyxl'
+            logger.info("openpyxl 엔진을 사용하여 Excel 내보내기를 진행합니다.")
+        except ImportError:
+            try:
+                import xlsxwriter
+                engine = 'xlsxwriter'
+                logger.info("xlsxwriter 엔진을 사용하여 Excel 내보내기를 진행합니다.")
+            except ImportError:
+                logger.error("Excel 내보내기에 필요한 패키지가 설치되지 않았습니다.")
+                return f'<div style="color:red;">Excel 내보내기를 위해 openpyxl 또는 xlsxwriter 패키지가 필요합니다.</div>'
+        
         # Excel 작성기 생성
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        with pd.ExcelWriter(output, engine=engine) as writer:
             # 노드 데이터 저장
             network_data["nodes"].to_excel(writer, sheet_name="Nodes", index=False)
             
@@ -52,7 +66,12 @@ def export_to_excel(network_data, analysis_results, filename="network_analysis.x
             
             # 중심성 지표 저장
             if "centrality" in analysis_results:
-                pd.DataFrame(analysis_results["centrality"]).to_excel(writer, sheet_name="Centrality", index=True)
+                # DataFrame으로 변환 (xlsxwriter와 호환되도록)
+                centrality_df = pd.DataFrame()
+                for metric_name, values in analysis_results["centrality"].items():
+                    centrality_df[metric_name] = pd.Series(values)
+                
+                centrality_df.to_excel(writer, sheet_name="Centrality", index=True)
             
             # 커뮤니티 정보 저장
             if "communities" in analysis_results:
@@ -60,6 +79,7 @@ def export_to_excel(network_data, analysis_results, filename="network_analysis.x
             
             # 요약 통계 저장
             if "summary" in analysis_results:
+                # 딕셔너리를 DataFrame으로 변환하여 저장
                 summary_df = pd.DataFrame([analysis_results["summary"]])
                 summary_df.to_excel(writer, sheet_name="Summary", index=False)
         
