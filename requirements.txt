@@ -17,4 +17,6 @@ kaleido==0.2.1
 xlsxwriter==3.1.9
 # 폰트 지원을 위한 패키지들
 fonttools==4.46.0
-matplotlib-inline==0.1.6 
+matplotlib-inline==0.1.6
+# Streamlit Cloud에서 작동 가능한 폰트 패키지
+font-roboto==0.0.1 
