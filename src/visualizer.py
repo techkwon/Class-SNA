@@ -1,6 +1,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import matplotlib.font_manager as fm
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
@@ -11,10 +12,85 @@ import logging
 import streamlit as st
 import base64
 from io import BytesIO
+import platform
+import re
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 한글 폰트 설정 함수
+def set_korean_font():
+    """matplotlib에서 한글 폰트를 사용하도록 설정"""
+    try:
+        # 운영체제 확인
+        system = platform.system()
+        
+        if system == 'Darwin':  # macOS
+            plt.rc('font', family='AppleGothic')
+        elif system == 'Windows':  # Windows
+            plt.rc('font', family='Malgun Gothic')
+        else:  # Linux 등
+            # Streamlit Cloud 환경에서는 나눔 폰트 설치 시도
+            try:
+                # 나눔 폰트 설치 (apt-get을 통해)
+                logger.info("나눔 폰트 설치 시도...")
+                os.system("apt-get update && apt-get install -y fonts-nanum")
+                # 폰트 캐시 갱신
+                os.system("fc-cache -fv")
+                logger.info("나눔 폰트 설치 완료")
+                
+                # 폰트 경로 찾기
+                font_list = fm.findSystemFonts(fontpaths=None, fontext='ttf')
+                nanum_fonts = [f for f in font_list if 'Nanum' in f]
+                
+                if nanum_fonts:
+                    # 나눔 폰트 사용
+                    plt.rc('font', family='NanumGothic')
+                    logger.info("나눔 폰트를 사용합니다.")
+                else:
+                    # 폰트 설치 시도했으나 찾지 못한 경우, 대체 방법 사용
+                    logger.warning("한글 폰트를 찾을 수 없습니다. 노드 레이블을 영문으로 변환합니다.")
+            except Exception as e:
+                logger.warning(f"한글 폰트 설치 실패: {str(e)}")
+        
+        # 폰트 설정 확인
+        plt.rc('axes', unicode_minus=False)  # 마이너스 기호 깨짐 방지
+        logger.info(f"폰트 설정 완료: {plt.rcParams['font.family']}")
+        
+    except Exception as e:
+        logger.warning(f"한글 폰트 설정 실패: {str(e)}")
+        logger.warning("기본 폰트를 사용합니다.")
+
+# 한글 폰트 설정 시도
+set_korean_font()
+
+# 한글을 영문으로 변환하는 함수 (폰트 문제 대비)
+def romanize_korean(text):
+    """한글 이름을 로마자로 변환 (폰트 문제 대비용)"""
+    # 간단한 음역 매핑
+    mapping = {
+        '김': 'Kim', '이': 'Lee', '박': 'Park', '정': 'Jung', 
+        '최': 'Choi', '장': 'Jang', '조': 'Jo', '강': 'Kang', 
+        '윤': 'Yoon', '한': 'Han', '송': 'Song', '황': 'Hwang',
+        '민': 'Min', '서': 'Seo', '도': 'Do', '신': 'Shin',
+        '우': 'Woo', '유': 'Yoo', '성': 'Sung', '지': 'Ji',
+        '예': 'Ye', '준': 'Jun', '진': 'Jin', '현': 'Hyun',
+        '승': 'Seung', '은': 'Eun', '하': 'Ha', '명': 'Myung'
+    }
+    
+    # 이름을 영문으로 변환
+    if len(text) >= 3:
+        # 성과 이름 분리 (김민준 -> 김 + 민준)
+        family = text[0]
+        given = text[1:]
+        
+        # 성은 매핑 테이블에서 찾고, 이름은 그대로 유지하되 원래 이름 뒤에 괄호로 표시
+        if family in mapping:
+            return f"{mapping[family]}.{given}"
+    
+    # 매핑이 없으면 원래 이름 사용
+    return text
 
 class NetworkVisualizer:
     """네트워크 그래프 시각화 클래스"""
@@ -24,6 +100,33 @@ class NetworkVisualizer:
         self.graph = analyzer.graph
         self.communities = analyzer.communities
         self.metrics = analyzer.metrics
+        
+        # 한글 폰트 문제가 있는지 확인
+        self.has_korean_font = self._check_korean_font()
+    
+    def _check_korean_font(self):
+        """한글 폰트가 사용 가능한지 확인"""
+        try:
+            # 간단한 한글 텍스트로 테스트
+            fig, ax = plt.subplots(figsize=(1, 1))
+            ax.text(0.5, 0.5, '테스트')
+            plt.close(fig)  # 테스트 후 닫기
+            
+            # 경고 메시지 확인
+            if any('missing from current font' in log for log in logging.Logger.manager.loggerDict):
+                logger.warning("한글 폰트 문제가 감지되었습니다.")
+                return False
+            
+            return True
+        except Exception as e:
+            logger.warning(f"한글 폰트 확인 중 오류: {str(e)}")
+            return False
+    
+    def _get_display_label(self, node_name, use_romanized=False):
+        """표시할 노드 레이블 생성 (한글 폰트 문제시 로마자 변환)"""
+        if use_romanized and re.search(r'[가-힣]', node_name):
+            return romanize_korean(node_name)
+        return node_name
     
     def create_plotly_network(self, layout="fruchterman", width=800, height=600):
         """Plotly를 사용한 인터랙티브 네트워크 그래프 생성"""
@@ -60,6 +163,26 @@ class NetworkVisualizer:
                 color_idx = i % len(color_palette)
                 community_colors[comm_id] = color_palette[color_idx]
             
+            # 한글 폰트 문제 확인 및 대응
+            use_romanized = not self.has_korean_font
+            
+            if use_romanized:
+                # 영문 변환된 노드 이름 표시 안내
+                st.info("한글 폰트 문제로 인해 학생 이름이 영문으로 표시됩니다.")
+                
+                # 매핑 테이블 생성
+                original_names = list(self.graph.nodes())
+                romanized_names = [self._get_display_label(node, use_romanized=True) for node in original_names]
+                name_map = dict(zip(romanized_names, original_names))
+                
+                # 매핑 테이블 표시
+                with st.expander("학생 이름 매핑 테이블", expanded=False):
+                    mapping_df = pd.DataFrame({
+                        "영문 표시": romanized_names,
+                        "원래 이름": original_names
+                    })
+                    st.dataframe(mapping_df)
+            
             # Plotly용 그래프 데이터 준비
             edge_x = []
             edge_y = []
@@ -80,7 +203,16 @@ class NetworkVisualizer:
                 
                 # 엣지 텍스트 및 두께
                 weight = edge[2].get('weight', 1)
-                edge_text.append(f"{edge[0]} → {edge[1]}, Weight: {weight}")
+                
+                # 한글 폰트 문제가 있으면 로마자 변환
+                if use_romanized:
+                    from_node = self._get_display_label(edge[0], use_romanized=True)
+                    to_node = self._get_display_label(edge[1], use_romanized=True)
+                    # 원래 이름도 보여주기 (괄호 안에)
+                    edge_text.append(f"{from_node} → {to_node}, 가중치: {weight}")
+                else:
+                    edge_text.append(f"{edge[0]} → {edge[1]}, 가중치: {weight}")
+                    
                 edge_width.append(weight)
             
             node_x = []
@@ -88,11 +220,20 @@ class NetworkVisualizer:
             node_text = []
             node_sizes = []
             node_colors = []
+            node_labels = []  # 표시할 레이블
             
             for node in self.graph.nodes():
                 x, y = pos[node]
                 node_x.append(x)
                 node_y.append(y)
+                
+                # 로마자 변환 여부에 따라 표시 레이블 결정
+                if use_romanized:
+                    display_name = self._get_display_label(node, use_romanized=True)
+                    node_labels.append(display_name)
+                else:
+                    display_name = node
+                    node_labels.append(node)
                 
                 # 노드 텍스트: 학생 이름과 중심성 정보 포함
                 text = f"{node}<br>"
@@ -118,9 +259,11 @@ class NetworkVisualizer:
             # 노드 트레이스
             node_trace = go.Scatter(
                 x=node_x, y=node_y,
-                mode='markers',
+                mode='markers+text',  # 텍스트 추가
                 hoverinfo='text',
                 text=node_text,
+                textposition="top center",  # 텍스트 위치
+                textfont=dict(size=10),  # 텍스트 크기
                 marker=dict(
                     showscale=False,
                     color=node_colors,
@@ -128,9 +271,23 @@ class NetworkVisualizer:
                     line=dict(width=1, color='#888')
                 ))
             
+            # 노드 레이블 트레이스 추가
+            label_trace = go.Scatter(
+                x=node_x, y=node_y,
+                mode='text',
+                text=node_labels,
+                textposition="top center",
+                textfont=dict(
+                    family="Arial, sans-serif",  # 범용 폰트 사용
+                    size=12,
+                    color="black"
+                ),
+                hoverinfo='none'
+            )
+            
             # 그래프 레이아웃
             fig = go.Figure(
-                data=[edge_trace, node_trace],
+                data=[edge_trace, node_trace, label_trace],  # 레이블 트레이스 추가
                 layout=go.Layout(
                     title="학급 관계 네트워크",
                     showlegend=False,
@@ -146,7 +303,24 @@ class NetworkVisualizer:
             
         except Exception as e:
             logger.error(f"Plotly 네트워크 그래프 생성 실패: {str(e)}")
-            raise Exception(f"네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
+            st.error(f"네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
+            
+            # 오류 발생 시 네트워크 데이터 표시
+            st.write("### 네트워크 데이터")
+            
+            if hasattr(self, 'graph') and self.graph:
+                # 노드 정보 표시
+                nodes_df = pd.DataFrame({
+                    "학생": list(self.graph.nodes()),
+                    "연결 중심성(In)": [self.metrics["in_degree"].get(node, 0) for node in self.graph.nodes()],
+                    "연결 중심성(Out)": [self.metrics["out_degree"].get(node, 0) for node in self.graph.nodes()],
+                    "매개 중심성": [self.metrics["betweenness"].get(node, 0) for node in self.graph.nodes()],
+                    "커뮤니티": [self.communities.get(node, -1) for node in self.graph.nodes()]
+                })
+                st.write("#### 노드 (학생) 정보")
+                st.dataframe(nodes_df)
+            
+            return None
     
     def create_pyvis_network(self, height="500px", width="100%"):
         """PyVis를 사용한 인터랙티브 네트워크 그래프 생성 (HTML)"""
@@ -171,6 +345,12 @@ class NetworkVisualizer:
                 color_idx = i % len(color_palette)
                 community_colors[comm_id] = color_palette[color_idx]
             
+            # 한글 폰트 문제 확인 및 대응
+            use_romanized = not self.has_korean_font
+            
+            if use_romanized:
+                st.info("한글 폰트 문제로 인해 PyVis 네트워크에서 학생 이름이 영문으로 표시됩니다.")
+            
             # 노드 추가
             for node in self.graph.nodes():
                 # 노드 크기 계산 (in_degree 기준)
@@ -187,8 +367,14 @@ class NetworkVisualizer:
                 title += f"매개 중심성: {self.metrics['betweenness'][node]:.3f}\n"
                 title += f"커뮤니티: {comm_id}"
                 
+                # 한글 폰트 문제가 있는 경우 로마자 변환
+                if use_romanized:
+                    display_label = self._get_display_label(node, use_romanized=True)
+                else:
+                    display_label = node
+                
                 # 노드 추가
-                net.add_node(node, label=node, title=title, size=size, color=color)
+                net.add_node(node, label=display_label, title=title, size=size, color=color)
             
             # 엣지 추가
             for edge in self.graph.edges(data=True):
@@ -198,8 +384,16 @@ class NetworkVisualizer:
                 # 엣지 너비 계산
                 width = min(weight * 2, 10)  # 너비 상한선 10
                 
+                # 엣지 툴팁 텍스트
+                if use_romanized:
+                    from_label = self._get_display_label(from_node, use_romanized=True)
+                    to_label = self._get_display_label(to_node, use_romanized=True)
+                    title = f"{from_label} → {to_label}, 가중치: {weight}"
+                else:
+                    title = f"{from_node} → {to_node}, 가중치: {weight}"
+                
                 # 엣지 추가
-                net.add_edge(from_node, to_node, title=f"Weight: {weight}", width=width)
+                net.add_edge(from_node, to_node, title=title, width=width)
             
             # 물리적 레이아웃 설정
             net.set_options("""
@@ -219,9 +413,35 @@ class NetworkVisualizer:
                 "interaction": {
                     "hover": true,
                     "navigationButtons": true
+                },
+                "edges": {
+                    "smooth": {
+                        "type": "continuous",
+                        "forceDirection": "none"
+                    }
+                },
+                "nodes": {
+                    "font": {
+                        "face": "arial",
+                        "size": 14
+                    }
                 }
             }
             """)
+            
+            # 맵핑 테이블 표시 (한글 폰트 문제가 있는 경우)
+            if use_romanized:
+                # 매핑 테이블 생성
+                node_names = list(self.graph.nodes())
+                romanized_names = [self._get_display_label(node, use_romanized=True) for node in node_names]
+                
+                # 매핑 테이블 표시
+                with st.expander("학생 이름 매핑 테이블 (PyVis)", expanded=False):
+                    mapping_df = pd.DataFrame({
+                        "영문 표시": romanized_names,
+                        "원래 이름": node_names
+                    })
+                    st.dataframe(mapping_df)
             
             # 임시 HTML 파일 생성
             with tempfile.NamedTemporaryFile(delete=False, suffix='.html') as tmpfile:
@@ -255,6 +475,10 @@ class NetworkVisualizer:
         except Exception as e:
             logger.error(f"PyVis 네트워크 그래프 생성 실패: {str(e)}")
             st.error(f"인터랙티브 네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
+            
+            # 오류 발생 시 간단한 안내 메시지
+            st.warning("인터랙티브 네트워크 그래프를 생성할 수 없습니다. 대신 Plotly 그래프를 사용해주세요.")
+            
             return None
     
     def create_centrality_plot(self, metric="in_degree", top_n=10):
@@ -276,9 +500,31 @@ class NetworkVisualizer:
             nodes = [item[0] for item in top_items]
             values = [item[1] for item in top_items]
             
+            # 한글 폰트 문제 확인 및 대응
+            use_romanized = not self.has_korean_font
+            
+            if use_romanized:
+                # 영문 변환된 노드 이름 사용
+                display_nodes = [self._get_display_label(node, use_romanized=True) for node in nodes]
+                # 원래 이름을 표시하기 위한 매핑 테이블
+                name_map = {self._get_display_label(node, use_romanized=True): node for node in nodes}
+                
+                st.info("한글 폰트 문제로 인해 학생 이름이 영문으로 표시됩니다.")
+                
+                # 매핑 테이블 표시
+                with st.expander("학생 이름 매핑 테이블", expanded=False):
+                    mapping_df = pd.DataFrame({
+                        "영문 표시": list(name_map.keys()),
+                        "원래 이름": list(name_map.values())
+                    })
+                    st.dataframe(mapping_df)
+            else:
+                # 한글 폰트 사용 가능하면 원래 이름 사용
+                display_nodes = nodes
+            
             # matplotlib 그래프 생성
             fig, ax = plt.subplots(figsize=(10, 6))
-            bars = ax.barh(nodes, values, color='lightblue')
+            bars = ax.barh(display_nodes, values, color='lightblue')
             
             # 그래프 스타일 설정
             ax.set_xlabel(f'{metric} 중심성 지표')
@@ -304,11 +550,59 @@ class NetworkVisualizer:
             ax.grid(True, axis='x', linestyle='--', alpha=0.7)
             
             plt.tight_layout()
+            
+            # Plotly로 대체 그래프 생성 (한글 폰트 문제가 있는 경우)
+            if use_romanized:
+                # 원본 노드 이름 데이터
+                original_nodes = nodes
+                values_dict = {node: value for node, value in zip(original_nodes, values)}
+                
+                # 한글과 로마자 모두 표시하는 Plotly 그래프 생성
+                fig_plotly = go.Figure()
+                
+                # 막대 그래프 추가
+                fig_plotly.add_trace(go.Bar(
+                    y=display_nodes,
+                    x=values,
+                    orientation='h',
+                    marker_color='lightblue',
+                    text=[f"{values_dict[original_node]:.3f}" for original_node in original_nodes],
+                    textposition='outside',
+                    hovertext=[f"{original_node}: {values_dict[original_node]:.3f}" for original_node in original_nodes]
+                ))
+                
+                # 레이아웃 설정
+                fig_plotly.update_layout(
+                    title=f'상위 {top_n}명 학생의 {metric_names.get(metric, metric)} 지표',
+                    xaxis_title=f'{metric} 중심성 지표',
+                    yaxis_title='학생',
+                    height=500,
+                    width=700
+                )
+                
+                # 플롯리 그래프 표시 (대체 방법)
+                st.write("### Plotly로 생성한 대체 그래프")
+                st.plotly_chart(fig_plotly)
+            
             return fig
             
         except Exception as e:
             logger.error(f"중심성 지표 그래프 생성 실패: {str(e)}")
-            raise Exception(f"중심성 지표 그래프 생성 중 오류가 발생했습니다: {str(e)}")
+            # 대체 방법으로 데이터 테이블 표시
+            st.error(f"그래프 생성 중 오류가 발생했습니다: {str(e)}")
+            
+            # 값 테이블로 대체 표시
+            if 'metric_values' in locals() and 'sorted_values' in locals() and 'top_items' in locals():
+                st.write("### 중심성 지표 데이터 (테이블)")
+                
+                # 상위 N개 항목 데이터프레임 생성
+                df = pd.DataFrame({
+                    "학생": [item[0] for item in top_items],
+                    f"{metric} 값": [item[1] for item in top_items]
+                })
+                st.dataframe(df)
+            
+            return None
     
     def create_community_table(self):
         """커뮤니티별 학생 목록 생성"""
@@ -323,6 +617,9 @@ class NetworkVisualizer:
                     community_groups[community_id] = []
                 community_groups[community_id].append(node)
             
+            # 한글 폰트 문제 확인 및 대응
+            use_romanized = not self.has_korean_font
+            
             # 커뮤니티별 데이터 준비
             data = []
             for comm_id, members in community_groups.items():
@@ -335,19 +632,62 @@ class NetworkVisualizer:
                     central_student = ""
                     central_value = 0
                 
-                data.append({
-                    "커뮤니티 ID": comm_id,
-                    "학생 수": len(members),
-                    "소속 학생": ", ".join(members),
-                    "중심 학생": central_student,
-                    "중심 학생 연결성": f"{central_value:.3f}"
-                })
+                # 한글 폰트 문제가 있으면 로마자 변환
+                if use_romanized:
+                    # 중심 학생 이름 변환
+                    central_student_display = self._get_display_label(central_student, use_romanized=True)
+                    
+                    # 소속 학생 목록 변환
+                    members_display = [self._get_display_label(m, use_romanized=True) for m in members]
+                    members_str = ", ".join(members_display)
+                    
+                    # 원본 이름과 로마자 매핑 정보 표시
+                    member_mapping = {self._get_display_label(m, use_romanized=True): m for m in members}
+                    
+                    data.append({
+                        "커뮤니티 ID": comm_id,
+                        "학생 수": len(members),
+                        "소속 학생": members_str,
+                        "중심 학생": central_student_display,
+                        "중심 학생 연결성": f"{central_value:.3f}",
+                        # 원본 이름 정보 저장
+                        "학생 매핑": member_mapping
+                    })
+                else:
+                    data.append({
+                        "커뮤니티 ID": comm_id,
+                        "학생 수": len(members),
+                        "소속 학생": ", ".join(members),
+                        "중심 학생": central_student,
+                        "중심 학생 연결성": f"{central_value:.3f}"
+                    })
             
             # 데이터프레임 생성
             df = pd.DataFrame(data)
+            
+            # 한글 폰트 문제가 있는 경우 매핑 테이블 표시
+            if use_romanized:
+                st.info("한글 폰트 문제로 인해 학생 이름이 영문으로 표시됩니다.")
+                
+                # 매핑 정보 표시
+                with st.expander("학생 이름 매핑 테이블", expanded=False):
+                    all_mappings = {}
+                    for row in data:
+                        all_mappings.update(row.get("학생 매핑", {}))
+                    
+                    mapping_df = pd.DataFrame({
+                        "영문 표시": list(all_mappings.keys()),
+                        "원래 이름": list(all_mappings.values())
+                    })
+                    st.dataframe(mapping_df)
+                
+                # 매핑 정보는 테이블에서 제거
+                if "학생 매핑" in df.columns:
+                    df = df.drop(columns=["학생 매핑"])
             
             return df
             
         except Exception as e:
             logger.error(f"커뮤니티 테이블 생성 실패: {str(e)}")
-            raise Exception(f"커뮤니티 테이블 생성 중 오류가 발생했습니다: {str(e)}") 
+            st.error(f"커뮤니티 테이블 생성 중 오류가 발생했습니다: {str(e)}")
+            return pd.DataFrame(columns=["커뮤니티 ID", "학생 수", "소속 학생", "중심 학생", "중심 학생 연결성"]) 
