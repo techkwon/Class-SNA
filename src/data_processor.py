@@ -54,6 +54,17 @@ class DataProcessor:
     def extract_json_from_text(self, text):
         """텍스트에서 JSON 부분 추출 및 정제"""
         try:
+            # 마크다운 코드 블록(```json) 처리
+            if "```json" in text or "```" in text:
+                # 코드 블록 내용 추출
+                code_block_pattern = r'```(?:json)?\s*\n([\s\S]*?)\n\s*```'
+                code_blocks = re.findall(code_block_pattern, text)
+                
+                if code_blocks:
+                    # 가장 큰 코드 블록 선택 (일반적으로 전체 JSON)
+                    text = max(code_blocks, key=len)
+                    logger.info("마크다운 코드 블록에서 JSON 추출 성공")
+            
             # 정규식을 사용하여 중괄호로 둘러싸인 유효한 JSON 객체를 찾습니다.
             json_pattern = r'(\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\})'
             matches = re.findall(json_pattern, text)
@@ -62,6 +73,11 @@ class DataProcessor:
                 # JSON 객체를 찾을 수 없는 경우
                 logger.error("API 응답에서 JSON 객체를 찾을 수 없습니다.")
                 st.error("API 응답에서 유효한 JSON을 찾을 수 없습니다. 다시 시도해주세요.")
+                
+                # 원본 응답 로깅 및 UI에 표시
+                logger.error(f"원본 응답: {text[:1000]}...")
+                st.code(text[:1000] + "..." if len(text) > 1000 else text, language="text")
+                
                 raise ValueError("API 응답에서 유효한 JSON을 찾을 수 없습니다.")
                 
             # 가장 큰 JSON 객체를 선택 (일반적으로 전체 응답)
@@ -83,6 +99,8 @@ class DataProcessor:
         except Exception as e:
             logger.error(f"JSON 추출 실패: {str(e)}")
             logger.error(traceback.format_exc())
+            st.error(f"JSON 추출 중 오류가 발생했습니다: {str(e)}")
+            st.code(text[:1000] + "..." if len(text) > 1000 else text, language="text")
             raise ValueError(f"JSON 추출 중 오류가 발생했습니다: {str(e)}")
     
     def analyze_data_structure(self, df):
@@ -98,7 +116,7 @@ class DataProcessor:
             # Gemini API를 사용하여 데이터 구조 분석
             analysis_result = self.api_manager.analyze_survey_data(data_str, questions_str)
             
-            # API 응답 전체를 디버깅 목적으로 로깅 (개발 중에만)
+            # API 응답 전체를 디버깅 목적으로 로깅
             logger.info(f"Gemini API 응답: {analysis_result[:1000]}...")
             
             # 디버그 정보를 UI에 표시
@@ -115,6 +133,7 @@ class DataProcessor:
             try:
                 # JSON 파싱 시도
                 result = json.loads(json_str)
+                logger.info("JSON 파싱 성공")
             except json.JSONDecodeError as e:
                 # JSON 파싱 실패 시 오류 표시 및 디버깅 정보 제공
                 logger.error(f"JSON 파싱 실패: {str(e)}")
@@ -123,19 +142,61 @@ class DataProcessor:
                 다시 시도해보세요. 오류 메시지: {str(e)}
                 """)
                 st.code(json_str[:500] + "..." if len(json_str) > 500 else json_str, language="json")
-                raise
+                
+                # 백업 로직: 예제 구조 생성
+                if "relationships" in analysis_result and "from" in analysis_result and "to" in analysis_result:
+                    st.warning("JSON 파싱은 실패했지만, API 응답에서 관계 데이터를 추출하려고 시도합니다.")
+                    
+                    # 간단한 패턴 매칭으로 관계 추출 시도
+                    rel_pattern = r'{"from":\s*"([^"]+)",\s*"to":\s*"([^"]+)"'
+                    relationships = []
+                    
+                    for match in re.finditer(rel_pattern, analysis_result):
+                        from_student, to_student = match.groups()
+                        relationships.append({
+                            "from": from_student,
+                            "to": to_student,
+                            "weight": 1,
+                            "type": "relationship"
+                        })
+                    
+                    if relationships:
+                        logger.info(f"백업 로직으로 {len(relationships)}개의 관계를 추출했습니다.")
+                        result = {
+                            "relationships": relationships,
+                            "students": list(set([r["from"] for r in relationships] + [r["to"] for r in relationships]))
+                        }
+                    else:
+                        raise
+                else:
+                    raise
             
-            # 필수 키 확인
+            # 필수 키 확인 및 추가
             required_keys = ["relationships", "students"]
             for key in required_keys:
                 if key not in result:
                     logger.warning(f"결과에 필수 키 '{key}'가 없습니다.")
-                    result[key] = []
+                    if key == "relationships":
+                        result[key] = []
+                    elif key == "students" and "relationships" in result and result["relationships"]:
+                        # relationships에서 학생 목록 추출
+                        students = set()
+                        for rel in result["relationships"]:
+                            if "from" in rel:
+                                students.add(rel["from"])
+                            if "to" in rel:
+                                students.add(rel["to"])
+                        result[key] = list(students)
+                        logger.info(f"관계 데이터에서 {len(students)}명의 학생을 추출했습니다.")
+                    else:
+                        result[key] = []
             
             return result
             
         except Exception as e:
             logger.error(f"데이터 구조 분석 실패: {str(e)}")
+            # 사용자에게 이해하기 쉬운 오류 메시지 제공
+            st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
             raise Exception(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
     
     def convert_to_network_data(self, analysis_result):
