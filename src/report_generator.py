@@ -120,10 +120,41 @@ class ReportGenerator:
         try:
             st.markdown("<div class='sub-header'>네트워크 시각화</div>", unsafe_allow_html=True)
             
+            # 세션 상태 초기화 (탭, 레이아웃, 중심성 지표, 상위 학생 수 유지)
+            if 'active_tab' not in st.session_state:
+                st.session_state.active_tab = "네트워크 그래프"
+            if 'selected_layout' not in st.session_state:
+                st.session_state.selected_layout = "fruchterman"
+            if 'selected_metric' not in st.session_state:
+                st.session_state.selected_metric = "in_degree"
+            if 'top_n' not in st.session_state:
+                st.session_state.top_n = 10
+                
+            # 탭 상태 변경 콜백 함수
+            def on_tab_change(tab_name):
+                st.session_state.active_tab = tab_name
+                
+            # 레이아웃 변경 콜백 함수
+            def on_layout_change(layout):
+                st.session_state.selected_layout = layout
+                
+            # 중심성 지표 변경 콜백 함수
+            def on_metric_change(metric):
+                st.session_state.selected_metric = metric
+                
+            # 상위 학생 수 변경 콜백 함수
+            def on_top_n_change(value):
+                st.session_state.top_n = value
+                
             # 탭 생성
-            tab1, tab2, tab3 = st.tabs(["네트워크 그래프", "중심성 지표", "커뮤니티 분석"])
+            tabs = ["네트워크 그래프", "중심성 지표", "커뮤니티 분석"]
+            active_tab_index = tabs.index(st.session_state.active_tab)
+            tab1, tab2, tab3 = st.tabs(tabs)
             
             with tab1:
+                # 활성 탭 설정
+                on_tab_change("네트워크 그래프")
+                
                 # 네트워크 그래프 시각화
                 st.write("#### 학급 관계 네트워크 그래프")
                 st.write("""
@@ -146,8 +177,14 @@ class ReportGenerator:
                     "레이아웃 선택:",
                     options=list(layout_options.keys()),
                     format_func=lambda x: layout_options[x],
-                    index=0
+                    index=list(layout_options.keys()).index(st.session_state.selected_layout),
+                    key="layout_selectbox",
+                    on_change=on_layout_change,
+                    args=(st.session_state.get("layout_selectbox"),)
                 )
+                
+                # 선택된 레이아웃 저장
+                st.session_state.selected_layout = selected_layout
                 
                 # Plotly 그래프 생성
                 fig = self.visualizer.create_plotly_network(layout=selected_layout)
@@ -201,6 +238,9 @@ class ReportGenerator:
                     st.warning("인터랙티브 네트워크 생성에 실패했습니다.")
             
             with tab2:
+                # 활성 탭 설정
+                on_tab_change("중심성 지표")
+                
                 # 중심성 지표 시각화
                 st.write("#### 중심성 지표 분석")
                 st.write("""
@@ -219,15 +259,36 @@ class ReportGenerator:
                     "closeness": "정보 접근성"
                 }
                 
-                selected_metric = st.selectbox(
-                    "중심성 지표 선택:",
-                    options=list(metric_options.keys()),
-                    format_func=lambda x: metric_options[x],
-                    index=0
-                )
+                col1, col2 = st.columns([3, 1])
                 
-                # 상위 학생 수 선택
-                top_n = st.slider("상위 학생 수:", min_value=5, max_value=20, value=10)
+                with col1:
+                    selected_metric = st.selectbox(
+                        "중심성 지표 선택:",
+                        options=list(metric_options.keys()),
+                        format_func=lambda x: metric_options[x],
+                        index=list(metric_options.keys()).index(st.session_state.selected_metric),
+                        key="metric_selectbox",
+                        on_change=on_metric_change,
+                        args=(st.session_state.get("metric_selectbox"),)
+                    )
+                
+                # 선택된 중심성 지표 저장
+                st.session_state.selected_metric = selected_metric
+                
+                with col2:
+                    # 상위 학생 수 선택
+                    top_n = st.slider(
+                        "상위 학생 수:", 
+                        min_value=5, 
+                        max_value=20, 
+                        value=st.session_state.top_n,
+                        key="top_n_slider",
+                        on_change=on_top_n_change,
+                        args=(st.session_state.get("top_n_slider"),)
+                    )
+                
+                # 선택된 상위 학생 수 저장
+                st.session_state.top_n = top_n
                 
                 # 중심성 그래프 생성
                 fig = self.visualizer.create_centrality_plot(metric=selected_metric, top_n=top_n)
@@ -242,6 +303,9 @@ class ReportGenerator:
                 st.dataframe(metrics_df)
             
             with tab3:
+                # 활성 탭 설정
+                on_tab_change("커뮤니티 분석")
+                
                 # 커뮤니티 분석
                 st.write("#### 하위 그룹(커뮤니티) 분석")
                 st.write("""

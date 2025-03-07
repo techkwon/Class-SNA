@@ -84,11 +84,34 @@ class DataProcessor:
                 response = requests.get(csv_export_url, headers=headers, timeout=30)
                 response.raise_for_status()  # HTTP 오류 발생 시 예외 발생
                 
-                # CSV 데이터를 StringIO 객체로 변환
-                csv_data = StringIO(response.text)
+                # 한글 인코딩 명시적 처리
+                content = response.content.decode('utf-8')
                 
-                # pandas로 CSV 데이터 로드
-                df = pd.read_csv(csv_data)
+                # CSV 데이터를 StringIO 객체로 변환
+                csv_data = StringIO(content)
+                
+                # pandas로 CSV 데이터 로드 (인코딩 명시)
+                df = pd.read_csv(csv_data, encoding='utf-8')
+                
+                # 한글 데이터 처리 확인
+                if len(df) > 0:
+                    logger.info(f"CSV 데이터 로드 성공: {len(df)}행, {len(df.columns)}열")
+                    
+                    # 미리보기에 표시할 때 더 보기 좋게 하기 위한 처리
+                    # 첫 번째 행이 모두 문자열이고 나머지 행과 형식이 다르면 헤더로 재설정
+                    if df.shape[0] > 1:
+                        first_row_is_header = True
+                        for col in df.columns:
+                            if not isinstance(df.loc[0, col], str):
+                                first_row_is_header = False
+                                break
+                        
+                        if first_row_is_header:
+                            # 첫 번째 행을 새 헤더로 설정
+                            new_headers = df.iloc[0].tolist()
+                            df = df.iloc[1:].reset_index(drop=True)
+                            df.columns = new_headers
+                            logger.info("첫 번째 행을 헤더로 재설정했습니다.")
                 
                 # 처리 완료
                 return df

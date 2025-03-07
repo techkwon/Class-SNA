@@ -823,12 +823,41 @@ class NetworkVisualizer:
             df['original_name'] = df['name']  # 원본 한글 이름 저장
             df['display_name'] = df['name'].apply(lambda x: romanize_korean(x))  # 영문 표시 이름
             
+            # 폰트 설정 (한글 지원용)
+            plt.rcParams['font.family'] = ['Malgun Gothic', 'AppleGothic', 'NanumGothic', 'sans-serif']
+            
+            # Windows일 경우 폰트 추가 설정
+            if platform.system() == 'Windows':
+                from matplotlib import font_manager
+                font_manager.fontManager.addfont('C:/Windows/Fonts/malgun.ttf')
+                
             # 그래프 생성 (영문 이름으로 그래프 생성)
-            fig, ax = plt.subplots(figsize=(10, 6))
-            bars = ax.barh(df['display_name'], df['value'], color='skyblue')
+            fig, ax = plt.subplots(figsize=(10, 8))
+            
+            # 색상 설정
+            colors = ['#4285F4', '#EA4335', '#34A853', '#FBBC05', '#8E24AA', '#16A085']
+            
+            # 데이터 정렬 순서에 따라 영문 이름 레이블 준비 (한글 깨짐 방지)
+            # 지표 값이 같은 학생들이 여럿이면 정렬이 불안정할 수 있으므로 인덱스 사용
+            df = df.reset_index(drop=True)
+            labels = []
+            for i, row in df.iterrows():
+                # 이름에 한글이 있으면 영문 표시
+                if re.search(r'[가-힣]', row['name']):
+                    labels.append(row['display_name'])
+                else:
+                    labels.append(row['name'])
+            
+            # 반전된 순서로 그래프 생성 (위에서 아래로 내림차순)
+            y_pos = range(len(labels))
+            bars = ax.barh(y_pos, df['value'], color=[colors[i % len(colors)] for i in range(len(labels))])
+            
+            # y축 레이블 설정 (영문 이름)
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(labels)
             
             # 그래프 스타일링 (한글 레이블)
-            ax.set_xlabel('중심성 지표 값')
+            ax.set_xlabel('중심성 지표 값', fontsize=12)
             
             # 중심성 지표별 적절한 제목 설정 (한글)
             metric_titles = {
@@ -838,15 +867,21 @@ class NetworkVisualizer:
                 'closeness': '정보 접근성'
             }
             title = metric_titles.get(metric, metric)
-            ax.set_title(f'상위 {top_n}명 학생의 {title}')
+            ax.set_title(f'상위 {top_n}명 학생의 {title}', fontsize=14, pad=20)
             
             # 값 주석 추가
-            for bar in bars:
+            for i, bar in enumerate(bars):
                 width = bar.get_width()
-                ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
-                        f'{width:.2f}', va='center')
+                ax.text(width + 0.01, i, f'{width:.2f}', va='center', fontsize=10)
+                
+            # 그리드 추가
+            ax.grid(axis='x', linestyle='--', alpha=0.6)
+            
+            # 레이아웃 조정
+            plt.tight_layout()
             
             # 매핑 테이블 스트림릿으로 표시 (한글 UI)
+            st.subheader("📋 영문 표기와 한글 이름 대응표")
             col1, col2 = st.columns(2)
             
             with col1:
@@ -859,7 +894,6 @@ class NetworkVisualizer:
                 for name in df['original_name']:
                     st.write(name)
             
-            plt.tight_layout()
             return fig
             
         except Exception as e:
