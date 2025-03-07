@@ -188,7 +188,7 @@ def main():
         if example_data != st.session_state.example_selected:
             st.session_state.example_selected = example_data
             if example_data:  # 예시 데이터 선택 시 URL 설정
-                st.session_state.sheet_url = f"example_{example_data}"
+                st.session_state.sheet_url = example_data  # 예시 식별자를 그대로 URL로 사용
                 sheet_url = st.session_state.sheet_url
                 st.info(f"선택한 예시 데이터: {example_options[example_data]}")
         
@@ -243,11 +243,9 @@ def main():
                 time.sleep(0.5)  # UI 표시를 위한 딜레이
                 
                 # 예시 데이터인 경우 내장 데이터 사용
-                if sheet_url.startswith("example_"):
-                    # 내장 예시 데이터 로드
-                    example_num = sheet_url.split("_")[1]
+                if sheet_url.startswith("example"):
                     # 파일 경로 구성
-                    example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f'example{example_num}.csv')
+                    example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{sheet_url}.csv")
                     
                     # 파일 존재 확인
                     if os.path.exists(example_path):
