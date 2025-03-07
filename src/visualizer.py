@@ -497,9 +497,9 @@ class NetworkVisualizer:
                     break
             
             # 툴팁 정보 구성 (한글로 표시, 내부는 영문 사용)
-            tooltip = f"이름: {node_name}<br>"
-            tooltip += f"그룹: {community_id}<br>"
-            tooltip += f"인기도(In): {self.analyzer.graph.in_degree(node_name)}<br>"
+            tooltip = f"이름: {node_name}\n"  # <br> 대신 \n 사용
+            tooltip += f"그룹: {community_id}\n"
+            tooltip += f"인기도(In): {self.analyzer.graph.in_degree(node_name)}\n"
             tooltip += f"친밀도(Out): {self.analyzer.graph.out_degree(node_name)}"
             
             # 노드 추가 (로마자 이름으로 내부 처리)
@@ -512,7 +512,7 @@ class NetworkVisualizer:
             romanized_target = romanize_korean(target)
             
             # 툴팁 한글로 표시
-            edge_tooltip = f"관계: {source} → {target}<br>강도: {weight}"
+            edge_tooltip = f"관계: {source} → {target}\n강도: {weight}"  # <br> 대신 \n 사용
             
             net.add_edge(romanized_source, romanized_target, value=weight, 
                          title=edge_tooltip)
@@ -550,6 +550,73 @@ class NetworkVisualizer:
                             }
                         }
                     });
+                    
+                    // 마우스 오버 이벤트 처리 (노드 강조 효과)
+                    network.on("hoverNode", function(params) {
+                        network.canvas.body.container.style.cursor = 'pointer';
+                        
+                        // 현재 노드와 연결된 노드만 강조
+                        var nodeId = params.node;
+                        var connectedNodes = network.getConnectedNodes(nodeId);
+                        connectedNodes.push(nodeId); // 자신도 포함
+                        
+                        // 연결된 노드와 엣지만 표시
+                        var updateArray = [];
+                        for (var i in allNodes) {
+                            var isConnected = connectedNodes.indexOf(i) !== -1;
+                            if (isConnected) {
+                                allNodes[i].color = nodeColors[i];
+                                allNodes[i].borderWidth = 3;
+                                allNodes[i].shadow = true;
+                            } else {
+                                allNodes[i].color = 'rgba(200,200,200,0.3)';
+                                allNodes[i].borderWidth = 1;
+                                allNodes[i].shadow = false;
+                            }
+                            updateArray.push(allNodes[i]);
+                        }
+                        nodes.update(updateArray);
+                        
+                        // 연결된 엣지 강조
+                        var updateEdges = [];
+                        for (var i in allEdges) {
+                            var edge = allEdges[i];
+                            if (edge.from === nodeId || edge.to === nodeId) {
+                                edge.color = 'rgba(50, 50, 200, 1)';
+                                edge.width = 2;
+                            } else {
+                                edge.color = 'rgba(200,200,200,0.3)';
+                                edge.width = 1;
+                            }
+                            updateEdges.push(edge);
+                        }
+                        edges.update(updateEdges);
+                    });
+                    
+                    // 마우스 오버 해제 이벤트 처리
+                    network.on("blurNode", function(params) {
+                        network.canvas.body.container.style.cursor = 'default';
+                        
+                        // 원래 상태로 복원
+                        var updateArray = [];
+                        for (var i in allNodes) {
+                            allNodes[i].color = nodeColors[i];
+                            allNodes[i].borderWidth = 1;
+                            allNodes[i].shadow = false;
+                            updateArray.push(allNodes[i]);
+                        }
+                        nodes.update(updateArray);
+                        
+                        // 엣지도 원래 상태로 복원
+                        var updateEdges = [];
+                        for (var i in allEdges) {
+                            var edge = allEdges[i];
+                            edge.color = 'rgba(100,100,100,0.8)';
+                            edge.width = 1;
+                            updateEdges.push(edge);
+                        }
+                        edges.update(updateEdges);
+                    });
                 }
             }, 100);
         });
@@ -561,8 +628,8 @@ class NetworkVisualizer:
         .vis-tooltip {
             position: absolute;
             visibility: hidden;
-            padding: 5px;
-            white-space: nowrap;
+            padding: 8px;
+            white-space: pre-wrap !important;
             font-family: Arial, sans-serif;
             font-size: 14px;
             color: black;
@@ -573,7 +640,41 @@ class NetworkVisualizer:
             pointer-events: none;
             z-index: 5;
         }
+        
+        /* 태그가 표시되지 않도록 스타일 설정 */
+        .vis-tooltip br, .vis-network-tooltip br {
+            display: block;
+            margin-top: 5px;
+        }
         """)
+        
+        # 태그를 처리하기 위한 JavaScript 추가 (tooltip 문자열 치환)
+        html = html.replace('function drawGraph() {', '''function drawGraph() {
+            // 툴팁 태그 처리 함수 정의
+            function formatTooltip(tooltip) {
+                // <br> 태그를 줄바꿈으로 변환
+                if (tooltip) {
+                    // \\u003c 는 < 의 유니코드 이스케이프 시퀀스
+                    tooltip = tooltip.replace(/\\u003cbr\\u003e/g, "\\n");
+                    tooltip = tooltip.replace(/<br>/g, "\\n");
+                }
+                return tooltip;
+            }
+            
+            // 원래 vis.DataSet을 확장하여 툴팁 처리
+            var originalDataSet = vis.DataSet;
+            vis.DataSet = function(data, options) {
+                if (data) {
+                    // 노드 데이터 처리
+                    for (var i = 0; i < data.length; i++) {
+                        if (data[i].title) {
+                            data[i].title = formatTooltip(data[i].title);
+                        }
+                    }
+                }
+                return new originalDataSet(data, options);
+            };
+        ''')
         
         return html
     

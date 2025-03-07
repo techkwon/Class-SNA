@@ -22,7 +22,41 @@ set_streamlit_page_config()
 # assets 디렉토리 확인
 check_and_create_assets()
 
+# 다크모드에서 텍스트가 잘 보이도록 전역 CSS 설정
+def apply_global_css():
+    """다크모드에서도 텍스트가 잘 보이도록 CSS 적용"""
+    dark_mode_css = """
+    <style>
+    /* 알림 메시지의 글씨를 항상 검은색으로 설정 */
+    div[data-testid="stAlert"] p {
+        color: black !important;
+        font-weight: 500 !important;
+    }
+    
+    /* 알림 메시지의 배경색을 더 밝게 설정 */
+    div[data-testid="stAlert"] {
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        border: 1px solid rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    /* HTML 태그가 그대로 보이는 문제 수정 */
+    .vis-tooltip, .vis-network-tooltip {
+        white-space: pre-wrap !important;
+    }
+    
+    /* <br> 태그 처리 */
+    .vis-tooltip br, .vis-network-tooltip br {
+        display: block !important;
+        content: " " !important;
+    }
+    </style>
+    """
+    st.markdown(dark_mode_css, unsafe_allow_html=True)
+
 def main():
+    # 전역 CSS 적용
+    apply_global_css()
+    
     # 페이지 헤더
     st.markdown("<div class='main-header'>학급 관계 네트워크 분석 시스템</div>", unsafe_allow_html=True)
     st.markdown("""
