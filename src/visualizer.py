@@ -520,7 +520,7 @@ class NetworkVisualizer:
         # 폰트 및 스타일 적용
         net = apply_korean_font_to_pyvis(net)
         
-        # HTML 산출물 얻기
+        # HTML 직접 반환 (파일에 저장하지 않음)
         html = net.generate_html()
         
         # 노드 클릭 이벤트 처리를 위한 JavaScript 추가

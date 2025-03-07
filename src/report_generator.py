@@ -27,15 +27,25 @@ class ReportGenerator:
         """다크모드에서도 텍스트가 잘 보이도록 CSS 적용"""
         dark_mode_css = """
         <style>
+        /* 알림 메시지의 글씨를 항상 검은색으로 설정 */
+        div[data-testid="stAlert"] p {
+            color: black !important;
+            font-weight: 500 !important;
+        }
+        
+        /* 알림 메시지의 배경색을 더 밝게 설정 */
+        div[data-testid="stAlert"] {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            border: 1px solid rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        /* 확장 가능한 섹션 스타일 수정 */
         .stExpander {
             color: inherit !important;
             background-color: rgba(255, 255, 255, 0.1) !important;
         }
         
-        .stAlert p {
-            color: inherit !important;
-        }
-        
+        /* 기타 요소들 */
         .css-qrbaxs {
             color: inherit !important;
             background-color: rgba(255, 255, 255, 0.1) !important;
@@ -152,20 +162,15 @@ class ReportGenerator:
                 - **호버**: 마우스를 올리면 학생 정보가 표시됩니다
                 """)
                 
-                pyvis_path = self.visualizer.create_pyvis_network()
+                # HTML 코드를 직접 받아옴 (파일 사용하지 않음)
+                html_data = self.visualizer.create_pyvis_network()
                 
-                if pyvis_path:
-                    # components.v1 모듈 사용 시도
+                if html_data:
                     try:
-                        # HTML 파일 표시
-                        with open(pyvis_path, 'r', encoding='utf-8') as f:
-                            html_data = f.read()
-                        
                         import streamlit.components.v1 as components
                         components.html(html_data, height=500)
-                    except (ImportError, AttributeError):
-                        # 대체 방법: 이미 visualizer에서 링크가 제공되었을 것입니다
-                        st.info("인터랙티브 네트워크를 보려면 위의 다운로드 링크를 사용하세요.")
+                    except Exception as e:
+                        st.error(f"인터랙티브 네트워크 표시 중 오류 발생: {str(e)}")
                 else:
                     st.warning("인터랙티브 네트워크 생성에 실패했습니다.")
             
