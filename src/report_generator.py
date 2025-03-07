@@ -19,6 +19,58 @@ class ReportGenerator:
         self.metrics = analyzer.metrics
         self.communities = analyzer.communities
         self.graph = analyzer.graph
+        
+        # 다크모드 대응 CSS 적용
+        self._apply_dark_mode_css()
+    
+    def _apply_dark_mode_css(self):
+        """다크모드에서도 텍스트가 잘 보이도록 CSS 적용"""
+        dark_mode_css = """
+        <style>
+        .stExpander {
+            color: inherit !important;
+            background-color: rgba(255, 255, 255, 0.1) !important;
+        }
+        
+        .stAlert p {
+            color: inherit !important;
+        }
+        
+        .css-qrbaxs {
+            color: inherit !important;
+            background-color: rgba(255, 255, 255, 0.1) !important;
+        }
+        
+        .stMarkdown p, .stMarkdown div, .stMarkdown code, .stMarkdown pre {
+            color: inherit !important;
+        }
+        
+        .stDataFrame {
+            color: inherit !important;
+        }
+        
+        /* 정보 메시지 배경색 조정 */
+        .element-container .stAlert.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-ak.st-al {
+            background-color: rgba(28, 131, 225, 0.2) !important;
+        }
+        
+        /* 성공 메시지 배경색 조정 */
+        .element-container .stAlert.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-am.st-al {
+            background-color: rgba(45, 201, 55, 0.2) !important;
+        }
+        
+        /* 경고 메시지 배경색 조정 */
+        .element-container .stAlert.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-an.st-al {
+            background-color: rgba(255, 170, 0, 0.2) !important;
+        }
+        
+        /* 에러 메시지 배경색 조정 */
+        .element-container .stAlert.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-ao.st-al {
+            background-color: rgba(255, 70, 70, 0.2) !important;
+        }
+        </style>
+        """
+        st.markdown(dark_mode_css, unsafe_allow_html=True)
     
     def generate_summary_section(self):
         """요약 정보 섹션 생성"""

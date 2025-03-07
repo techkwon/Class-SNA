@@ -258,4 +258,22 @@ class NetworkAnalyzer:
         for node, community_id in self.communities.items():
             node_colors[node] = color_palette[community_id % len(color_palette)]
             
-        return node_colors 
+        return node_colors
+        
+    def get_centrality_metrics(self):
+        """중심성 지표 반환
+        아직 계산되지 않았다면 계산 후 반환합니다.
+        
+        반환 형식: {
+            'in_degree': {node: value, ...},
+            'out_degree': {node: value, ...},
+            'betweenness': {node: value, ...},
+            'closeness': {node: value, ...},
+            ...
+        }
+        """
+        # 중심성 지표가 없다면 계산
+        if not self.metrics:
+            self.calculate_centrality()
+            
+        return self.metrics 
