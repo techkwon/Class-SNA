@@ -40,6 +40,16 @@ def main():
         
         sheet_url = st.text_input("구글 시트 공유 링크:")
         
+        # 구글 설문조사 예시 링크 추가
+        st.markdown("### 설문조사 양식 예시")
+        st.markdown("""
+        아래 링크로 학생 관계 설문조사 양식을 복사하여 사용할 수 있습니다:
+        
+        [📋 설문조사 양식 복사하기](https://docs.google.com/forms/d/1OOpDNUMp3GIooYb0PgvTUHpMJqfHxY7fMGNRAM_Xez8/copy)
+        
+        이 링크를 통해 설문조사를 생성한 후, 응답 스프레드시트의 링크를 위에 입력하세요.
+        """)
+        
         st.markdown("### 예시 데이터")
         st.markdown("""
         아래 예시 데이터 중 하나를 선택하여 테스트해볼 수 있습니다:
