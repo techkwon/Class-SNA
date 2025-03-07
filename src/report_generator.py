@@ -333,30 +333,23 @@ class ReportGenerator:
                     img_bytes.seek(0)
                     
                     # 다운로드 링크 생성
-                    b64 = base64.b64encode(img_bytes.read()).decode()
-                    st.markdown(f'<a href="data:image/png;base64,{b64}" download="network_graph.png">네트워크 그래프 PNG 다운로드</a>', unsafe_allow_html=True)
-                except ImportError:
-                    # kaleido가 없으면 안내 메시지 표시
-                    st.warning("이미지 내보내기를 위해 kaleido 패키지가 필요합니다. `pip install kaleido` 명령으로 설치할 수 있습니다.")
-                    # 대안으로 JSON 형식 제공
-                    json_str = fig.to_json()
-                    json_b64 = base64.b64encode(json_str.encode()).decode()
-                    st.markdown(f'<a href="data:application/json;base64,{json_b64}" download="network_graph.json">네트워크 그래프 JSON 다운로드</a>', unsafe_allow_html=True)
+                    img_b64 = base64.b64encode(img_bytes.getvalue()).decode()
+                    st.markdown(f'<a href="data:image/png;base64,{img_b64}" download="network_graph.png">네트워크 그래프 PNG 다운로드</a>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.warning(f"PNG 내보내기에 실패했습니다. kaleido 패키지가 필요합니다: {str(e)}")
                 
-                # PyVis HTML 다운로드
-                pyvis_path = self.visualizer.create_pyvis_network()
-                if pyvis_path:
-                    try:
-                        with open(pyvis_path, 'r', encoding='utf-8') as f:
-                            html_content = f.read()
-                        
+                # 인터랙티브 네트워크 다운로드 링크
+                try:
+                    # HTML 코드를 직접 생성하여 다운로드 링크 제공 (파일 저장 없이)
+                    html_content = self.visualizer.create_pyvis_network()
+                    if html_content:
                         html_b64 = base64.b64encode(html_content.encode()).decode()
                         st.markdown(f'<a href="data:text/html;base64,{html_b64}" download="interactive_network.html">인터랙티브 네트워크 HTML 다운로드</a>', unsafe_allow_html=True)
-                    except Exception as e:
-                        logger.error(f"HTML 파일 읽기 실패: {str(e)}")
+                    else:
                         st.warning("인터랙티브 네트워크 HTML 생성에 실패했습니다.")
-                else:
-                    st.warning("인터랙티브 네트워크 생성에 실패했습니다.")
+                except Exception as e:
+                    logger.error(f"인터랙티브 HTML 생성 실패: {str(e)}")
+                    st.warning("인터랙티브 네트워크 HTML 생성에 실패했습니다.")
             
             return True
             
