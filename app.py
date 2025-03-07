@@ -90,37 +90,42 @@ def init_session_state():
 
 def reset_session():
     """세션 상태를 완전히 초기화"""
-    # 분석 상태 초기화
+    # 모든 세션 상태를 삭제
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+        
+    # 기본값 설정
     st.session_state.analyzed = False
     st.session_state.example_selected = ""
     st.session_state.sheet_url = ""
-    
-    # UI 상태 초기화
-    st.session_state.active_tab = 0
+    st.session_state.network_data = None
     st.session_state.selected_layout = "fruchterman"
     st.session_state.selected_metric = "in_degree"
     st.session_state.top_n = 10
+    st.session_state.active_tab = 0
     
-    # 데이터 객체 초기화
-    if 'network_data' in st.session_state:
-        del st.session_state.network_data
-    if 'analyzer' in st.session_state:
-        del st.session_state.analyzer
-    if 'visualizer' in st.session_state:
-        del st.session_state.visualizer
-    if 'report_generator' in st.session_state:
-        del st.session_state.report_generator
-        
-    # 캐시 초기화
-    st.cache_data.clear()
-    st.cache_resource.clear()
+    # 캐시 디렉토리 정리
+    try:
+        import shutil
+        cache_dirs = ['.streamlit', '.cache']
+        for cache_dir in cache_dirs:
+            if os.path.exists(cache_dir):
+                for item in os.listdir(cache_dir):
+                    item_path = os.path.join(cache_dir, item)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+    except Exception as e:
+        logger.warning(f"캐시 정리 중 오류: {str(e)}")
     
-    # 페이지 새로고침 유도
-    st.experimental_rerun()
+    # 중복 요소 방지를 위한 페이지 새로고침
+    st.rerun()
 
 def main():
     # 전역 CSS 적용
     apply_global_css()
+    
+    # 필수 디렉토리 확인
+    check_and_create_assets()
     
     # 세션 상태 초기화
     init_session_state()
@@ -140,7 +145,7 @@ def main():
         시트는 '공개' 또는 '링크가 있는 사용자에게 공개' 상태여야 합니다.
         """)
         
-        # 입력 URL 상태 유지
+        # URL 입력 필드
         sheet_url = st.text_input("구글 시트 공유 링크:", value=st.session_state.sheet_url)
         
         # URL 변경 시 세션 상태 업데이트
@@ -166,57 +171,63 @@ def main():
         
         example_options = {
             "": "선택하세요",
-            "https://docs.google.com/spreadsheets/d/1iBAe4rYrQ8MuQyKVlZ-awqGSiAr9pMAaLK8y5BSrIX8": "예시 1: 가상 학급 친구 관계",
-            "https://docs.google.com/spreadsheets/d/1-Nv-aAQkUkS9KYJwF1VlnY6qRKEO5SnNVQfmIZLNDfQ": "예시 2: 협업 선호도"
+            "example1": "예시 1: 가상 학급 친구 관계",
+            "example2": "예시 2: 협업 선호도"
         }
         
-        # 예시 데이터 선택 상태 유지
+        # 예시 데이터 선택 - 세션 상태 사용
         example_data = st.selectbox(
             "예시 데이터 선택:",
             options=list(example_options.keys()),
             format_func=lambda x: example_options[x],
-            index=list(example_options.keys()).index(st.session_state.example_selected) if st.session_state.example_selected in example_options else 0
+            index=list(example_options.keys()).index(st.session_state.example_selected) if st.session_state.example_selected in example_options else 0,
+            key="example_selector"
         )
         
-        # 예시 데이터 선택 시 세션 상태 업데이트
+        # 예시 데이터 선택 시 처리
         if example_data != st.session_state.example_selected:
             st.session_state.example_selected = example_data
-            if example_data:  # 예시 데이터 선택 시 URL 업데이트
-                st.session_state.sheet_url = example_data
-                sheet_url = example_data
+            if example_data:  # 예시 데이터 선택 시 URL 설정
+                st.session_state.sheet_url = f"example_{example_data}"
+                sheet_url = st.session_state.sheet_url
                 st.info(f"선택한 예시 데이터: {example_options[example_data]}")
         
         st.markdown("### 분석 실행")
+        
+        # 분석 및 초기화 버튼
         col1, col2 = st.columns(2)
         
         with col1:
-            analyze_button = st.button("분석 시작", type="primary")
+            # 분석 시작 버튼 추가
+            analyze_button = st.button("분석 시작", type="primary", key="analyze_button")
         
         with col2:
             # 초기화 버튼
             reset_button = st.button("데이터 초기화", key="reset_button")
-            if reset_button:
-                reset_session()
     
-    # 메인 콘텐츠
-    if analyze_button and sheet_url:
-        try:
-            # 이미 분석된 상태인지 확인하고, 다시 분석해야 한다면 상태 초기화
-            if st.session_state.analyzed and 'network_data' in st.session_state:
-                # 동일한 URL이라면 재분석하지 않고 기존 결과 표시
-                if st.session_state.get('last_analyzed_url') == sheet_url:
-                    # 기존 객체 재사용
-                    report_generator = st.session_state.report_generator
-                    report_generator.generate_full_report(st.session_state.network_data)
-                    show_footer()
-                    return
-                # 다른 URL이면 객체 초기화
-                else:
-                    for key in ['network_data', 'analyzer', 'visualizer', 'report_generator']:
-                        if key in st.session_state:
-                            del st.session_state[key]
-            
-            with st.spinner("데이터를 분석 중입니다. 잠시만 기다려주세요..."):
+    # 초기화 버튼 클릭 시
+    if reset_button:
+        reset_session()
+    
+    # 메인 영역
+    if analyze_button or st.session_state.analyzed:
+        # URL이 비어있는지 확인
+        if not sheet_url:
+            st.error("구글 시트 공유 링크를 입력하거나 예시 데이터를 선택해주세요.")
+            st.stop()
+        
+        # 분석 상태 설정
+        st.session_state.analyzed = True
+        
+        # 동일한 URL인 경우 이전 분석 결과 재사용
+        if 'last_analyzed_url' in st.session_state and 'network_data' in st.session_state:
+            if sheet_url == st.session_state.last_analyzed_url and st.session_state.network_data:
+                show_analysis_results()
+                st.stop()
+        
+        # 새로운 URL 분석
+        with st.spinner("데이터를 분석 중입니다. 잠시만 기다려주세요..."):
+            try:
                 # 1. API 매니저 초기화
                 api_manager = APIManager()
                 
@@ -229,130 +240,168 @@ def main():
                 
                 # 2.1 데이터 로드
                 progress_text.text("구글 시트에서 데이터를 가져오는 중...")
-                time.sleep(1)  # UI 표시를 위한 딜레이
+                time.sleep(0.5)  # UI 표시를 위한 딜레이
                 
-                try:
+                # 예시 데이터인 경우 내장 데이터 사용
+                if sheet_url.startswith("example_"):
+                    # 내장 예시 데이터 로드
+                    example_num = sheet_url.split("_")[1]
+                    # 파일 경로 구성
+                    example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f'example{example_num}.csv')
+                    
+                    # 파일 존재 확인
+                    if os.path.exists(example_path):
+                        df = pd.read_csv(example_path)
+                    else:
+                        st.error(f"예시 데이터 파일이 존재하지 않습니다: {example_path}")
+                        st.stop()
+                else:
+                    # 실제 구글 시트에서 데이터 로드
                     df = data_processor.load_from_gsheet(sheet_url)
-                    progress_bar.progress(20)
-                    
-                    # 데이터 미리보기
-                    st.markdown("<div class='sub-header'>설문조사 데이터 미리보기</div>", unsafe_allow_html=True)
-                    st.dataframe(df.head())
-                    
-                    # 2.2 데이터 구조 분석
-                    progress_text.text("AI가 데이터 구조를 분석하는 중...")
-                    time.sleep(1)
-                    
-                    analysis_result = data_processor.analyze_data_structure(df)
-                    progress_bar.progress(50)
-                    
-                    # 2.3 네트워크 데이터로 변환
-                    progress_text.text("관계 네트워크 데이터 생성 중...")
-                    time.sleep(1)
-                    
-                    network_data = data_processor.convert_to_network_data(analysis_result)
-                    progress_bar.progress(70)
-                    
-                    # 세션 상태에 저장
-                    st.session_state.network_data = network_data
-                    st.session_state.last_analyzed_url = sheet_url
-                    
-                    # 3. 네트워크 분석
-                    progress_text.text("네트워크 분석 및 시각화 준비 중...")
-                    
-                    analyzer = NetworkAnalyzer(network_data)
-                    metrics = analyzer.calculate_centrality()
-                    communities = analyzer.detect_communities()
-                    progress_bar.progress(85)
-                    
-                    # 세션 상태에 저장
-                    st.session_state.analyzer = analyzer
-                    
-                    # 4. 네트워크 시각화
-                    visualizer = NetworkVisualizer(analyzer)
-                    st.session_state.visualizer = visualizer
-                    
-                    # 5. 분석 보고서 생성
-                    progress_text.text("분석 보고서 생성 중...")
-                    time.sleep(1)
-                    
-                    report_generator = ReportGenerator(analyzer, visualizer)
-                    st.session_state.report_generator = report_generator
-                    progress_bar.progress(100)
-                    progress_text.text("분석 완료!")
-                    
-                    # 분석 완료 상태 저장
-                    st.session_state.analyzed = True
-                    
-                    # 보고서 표시
-                    st.markdown("---")
-                    report_generator.generate_full_report(network_data)
-                    
-                except Exception as e:
-                    handle_error(e, "데이터 처리")
                 
-            # 푸터 표시
-            show_footer()
+                progress_bar.progress(20)
                 
-        except Exception as e:
-            handle_error(e, "시스템")
+                # 데이터 미리보기
+                st.markdown("<div class='sub-header'>설문조사 데이터 미리보기</div>", unsafe_allow_html=True)
+                st.dataframe(df.head())
+                
+                # 2.2 데이터 구조 분석
+                progress_text.text("AI가 데이터 구조를 분석하는 중...")
+                time.sleep(0.5)
+                
+                # 데이터 구조 분석
+                analysis_result = data_processor.analyze_data_structure(df)
+                analysis_result['dataframe'] = df  # 데이터프레임 추가
+                progress_bar.progress(50)
+                
+                # 2.3 네트워크 데이터로 변환
+                progress_text.text("관계 네트워크 데이터 생성 중...")
+                time.sleep(0.5)
+                
+                # 네트워크 데이터 변환
+                network_data = data_processor.convert_to_network_data(analysis_result)
+                progress_bar.progress(70)
+                
+                # 세션 상태에 저장
+                st.session_state.network_data = network_data
+                st.session_state.last_analyzed_url = sheet_url
+                
+                # 2.4 네트워크 분석
+                progress_text.text("네트워크 분석 및 시각화 생성 중...")
+                
+                # 세션에서 network_data가 변경되었는지 확인
+                network_data = st.session_state.network_data
+                
+                # 3. 네트워크 분석
+                analyzer = NetworkAnalyzer(network_data)
+                
+                # 분석 지표 계산
+                analyzer.calculate_centrality()
+                progress_bar.progress(80)
+                
+                # 커뮤니티 탐지
+                communities = analyzer.detect_communities()
+                progress_bar.progress(90)
+                
+                # 4. 시각화
+                visualizer = NetworkVisualizer(analyzer)
+                
+                # 한글 폰트 설정
+                set_korean_font()
+                
+                # 5. 보고서 생성
+                report_generator = ReportGenerator(analyzer, visualizer)
+                
+                # 진행 완료
+                progress_bar.progress(100)
+                progress_text.empty()
+                
+                # 분석 결과 표시
+                st.markdown("<div class='sub-header'>분석 결과</div>", unsafe_allow_html=True)
+                report_generator.generate_full_report(network_data)
+                
+                # 푸터 표시
+                show_footer()
+                
+            except Exception as e:
+                # 오류 처리
+                handle_error(e, error_type="데이터 처리")
     
-    elif analyze_button and not sheet_url:
-        st.error("구글 시트 링크를 입력해주세요.")
-    
-    else:
-        # 이미 분석 완료된 상태라면 결과 표시
-        if st.session_state.analyzed and 'network_data' in st.session_state and 'report_generator' in st.session_state:
-            st.markdown("---")
-            st.session_state.report_generator.generate_full_report(st.session_state.network_data)
-            show_footer()
-            return
+    # 초기 화면
+    elif not st.session_state.analyzed:
+        # 시작 안내
+        st.info("👈 왼쪽 사이드바에서 데이터를 입력하고 '분석 시작' 버튼을 클릭하세요.")
         
-        # 초기 화면
-        st.markdown("<div class='sub-header'>시작하기</div>", unsafe_allow_html=True)
-        
-        # 설명 카드
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            ### 📊 분석 기능
-            
-            - 학생 간 관계 네트워크 그래프 자동 생성
-            - 중심성 지표 계산 (연결, 매개, 근접 중심성)
-            - 하위 그룹(커뮤니티) 자동 탐지
-            - 소외 학생 식별 및 강조
-            - 시각화 및 분석 결과 다운로드
-            """)
-        
-        with col2:
-            st.markdown("""
-            ### 🛠️ 사용 방법
-            
-            1. 사이드바에 구글 시트 공유 링크 입력
-            2. 또는 예시 데이터 선택
-            3. '분석 시작' 버튼 클릭
-            4. AI가 데이터 구조를 자동으로 파악
-            5. 분석 결과 및 시각화 확인
-            6. 필요한 결과 다운로드
-            """)
-        
-        st.markdown("<div class='sub-header'>설문조사 데이터 형식</div>", unsafe_allow_html=True)
+        # 설명 추가
         st.markdown("""
-        다양한 형식의 설문조사 데이터를 지원합니다. AI가 데이터 구조를 자동으로 분석하여 적절한 네트워크 그래프로 변환합니다.
+        ### 📊 이 앱으로 무엇을 할 수 있나요?
         
-        **지원 형식 예시:**
-        - 학생별 선호하는 친구(들) 선택 형식
-        - 협업/학습/친목 등 여러 관계 유형 질문
-        - 직접 학생 이름 입력 또는 항목 선택 형식
+        이 앱은 학급 내 학생들 간의 관계를 분석하여 다음과 같은 정보를 제공합니다:
         
-        **가장 이상적인 형식:**
-        - 첫 번째 열: 응답자(학생) 이름
-        - 나머지 열: 관계 질문 (예: "함께 공부하고 싶은 친구는?", "도움을 청하고 싶은 친구는?" 등)
+        1. **학생 간 관계 시각화**: 누가 누구와 연결되어 있는지 직관적으로 확인할 수 있습니다.
+        2. **중심성 분석**: 학급 내에서 인기가 많거나 영향력이 큰 학생을 식별합니다.
+        3. **그룹 분석**: 자연스럽게 형성된 소그룹(커뮤니티)을 탐지합니다.
+        4. **소외 학생 식별**: 관계망에서 소외된 학생을 찾아내 개입이 필요한 경우를 알려줍니다.
+        5. **관계 패턴 분석**: 학급 전체의 관계 패턴을 요약하여 보여줍니다.
+        
+        ### 🔍 사용 방법
+        
+        1. 구글 폼으로 학생들의 관계 설문조사를 실시합니다 (예: "함께 일하고 싶은 친구는?")
+        2. 구글 시트로 응답을 수집하고 시트의 공유 링크를 복사합니다
+        3. 이 앱에 링크를 붙여넣고 '분석 시작' 버튼을 클릭합니다
+        
+        ### 🛠️ 필요한 데이터 형식
+        
+        - 응답자 이름/ID를 포함하는 열 1개 이상
+        - 관계를 나타내는 질문(누구와 함께 하고 싶은지 등)을 포함하는 열 1개 이상
+        
+        ### 📝 예시 질문
+        
+        - "함께 공부하고 싶은 친구는 누구인가요?"
+        - "어려운 일이 있을 때 도움을 청하고 싶은 친구는?"
+        - "여가 시간을 함께 보내고 싶은 친구는?"
         """)
         
         # 푸터 표시
         show_footer()
+
+# 분석 결과 표시 함수
+def show_analysis_results():
+    """저장된 분석 결과 표시"""
+    try:
+        # 세션에서 network_data 가져오기
+        network_data = st.session_state.network_data
+        
+        # 분석 객체 생성
+        analyzer = NetworkAnalyzer(network_data)
+        
+        # 분석 지표 계산 (이미 계산되어 있을 수 있음)
+        if not hasattr(analyzer, 'metrics') or not analyzer.metrics:
+            analyzer.calculate_centrality()
+        
+        # 커뮤니티 탐지 (이미 탐지되어 있을 수 있음)
+        if not hasattr(analyzer, 'communities') or not analyzer.communities:
+            analyzer.detect_communities()
+        
+        # 시각화 객체 생성
+        visualizer = NetworkVisualizer(analyzer)
+        
+        # 한글 폰트 설정
+        set_korean_font()
+        
+        # 보고서 생성기 생성
+        report_generator = ReportGenerator(analyzer, visualizer)
+        
+        # 분석 결과 표시
+        st.markdown("<div class='sub-header'>분석 결과</div>", unsafe_allow_html=True)
+        report_generator.generate_full_report(network_data)
+        
+        # 푸터 표시
+        show_footer()
+    
+    except Exception as e:
+        # 오류 처리
+        handle_error(e, error_type="분석 결과 표시")
 
 if __name__ == "__main__":
     main() 

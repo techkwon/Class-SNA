@@ -430,26 +430,57 @@ class ReportGenerator:
             return False
     
     def generate_full_report(self, network_data):
-        """전체 분석 보고서 생성"""
+        """종합 보고서 생성 및 표시"""
         try:
-            # 요약 섹션
-            self.generate_summary_section()
+            # 세션 상태 초기화 (없는 경우)
+            if 'active_tab' not in st.session_state:
+                st.session_state.active_tab = 0
             
-            # 시각화 섹션
-            self.generate_visualizations()
+            # 탭 생성
+            tab_names = ["네트워크 개요", "중심성 분석", "하위 그룹 분석", "대화형 시각화", "소외 학생 분석"]
+            tabs = st.tabs(tab_names)
             
-            # 내보내기 옵션 섹션
-            self.generate_export_options(network_data)
+            # 각 탭에 내용 채우기
+            with tabs[0]:  # 네트워크 개요
+                st.markdown("## 네트워크 분석 개요")
+                self._show_network_stats(network_data)
+                
+                # 요약 보고서
+                st.markdown("### 네트워크 요약")
+                summary = self.analyzer.generate_summary()
+                st.markdown(summary)
+                
+                # 요약 시각화
+                st.markdown("### 전체 네트워크 시각화")
+                summary_viz = self.visualizer.create_plotly_network()
+                if summary_viz is not None:
+                    st.plotly_chart(summary_viz, use_container_width=True)
+                else:
+                    st.warning("네트워크 시각화 생성에 실패했습니다.")
             
-            # 주의: 메인 앱에서 이미 푸터를 표시하므로 여기서는 표시하지 않음
-            # 단일 푸터 표시만 하려면 아래 마크다운 코드를 주석 처리하세요
-            # st.markdown("---")
-            # st.markdown("<div style='text-align: center; color: gray; font-size: 0.8em;'>학급 관계 네트워크 분석 시스템 (Class-SNA) | 데이터 분석 및 시각화: NetworkX, Plotly | AI 분석: Google Gemini</div>", unsafe_allow_html=True)
+            with tabs[1]:  # 중심성 분석
+                st.markdown("## 중심성 분석")
+                self.show_centrality_analysis(network_data)
+            
+            with tabs[2]:  # 하위 그룹 분석
+                st.markdown("## 하위 그룹 (커뮤니티) 분석")
+                self.show_communities(network_data)
+            
+            with tabs[3]:  # 대화형 시각화
+                st.markdown("## 대화형 관계망 시각화")
+                self.show_interactive_network(network_data)
+            
+            with tabs[4]:  # 소외 학생 분석
+                st.markdown("## 소외 학생 분석")
+                self.show_isolated_students(network_data)
             
             logger.info("보고서 생성 완료")
             return True
             
         except Exception as e:
-            st.error(f"보고서 생성 중 오류가 발생했습니다: {str(e)}")
-            logger.error(f"보고서 생성 실패: {str(e)}")
+            logger.error(f"보고서 생성 중 오류: {str(e)}")
+            # 오류 메시지 대신 빈 내용 반환
+            st.warning(f"보고서 생성 중 오류가 발생했습니다: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False 
