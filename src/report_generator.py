@@ -294,9 +294,10 @@ class ReportGenerator:
             # 내보내기 옵션 섹션
             self.generate_export_options(network_data)
             
-            # 사용된 라이브러리 및 데이터 출처 표시
-            st.markdown("---")
-            st.markdown("<div style='text-align: center; color: gray; font-size: 0.8em;'>학급 관계 네트워크 분석 시스템 (Class-SNA) | 데이터 분석 및 시각화: NetworkX, Plotly | AI 분석: Google Gemini</div>", unsafe_allow_html=True)
+            # 주의: 메인 앱에서 이미 푸터를 표시하므로 여기서는 표시하지 않음
+            # 단일 푸터 표시만 하려면 아래 마크다운 코드를 주석 처리하세요
+            # st.markdown("---")
+            # st.markdown("<div style='text-align: center; color: gray; font-size: 0.8em;'>학급 관계 네트워크 분석 시스템 (Class-SNA) | 데이터 분석 및 시각화: NetworkX, Plotly | AI 분석: Google Gemini</div>", unsafe_allow_html=True)
             
             logger.info("보고서 생성 완료")
             return True

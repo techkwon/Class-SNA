@@ -67,6 +67,13 @@ def get_korean_fonts():
                 korean_keywords = ['nanum', 'gothic', 'gulim', 'batang', 'dotum', 'malgun', '나눔', '고딕', '굴림', '바탕', '돋움', '맑은']
                 if any(keyword in font.name.lower() for keyword in korean_keywords):
                     korean_fonts.append(font.name)
+        
+        # 기본 시스템 폰트도 추가 (한글 지원 가능성이 있는 폰트)
+        system_fonts = ['Arial Unicode MS', 'Segoe UI', 'Microsoft Sans Serif', 'Tahoma']
+        for font in system_fonts:
+            if font not in korean_fonts:
+                korean_fonts.append(font)
+                
     except Exception as e:
         logger.warning(f"한글 폰트 목록 확인 중 오류 발생: {str(e)}")
     
@@ -75,8 +82,14 @@ def get_korean_fonts():
 # 한글 폰트 설치 안내
 def show_korean_font_installation_guide():
     """한글 폰트 설치 안내 메시지 표시"""
+    # 이미 안내가 표시되었는지 확인
+    if 'font_guide_shown' in st.session_state and st.session_state['font_guide_shown']:
+        return
+        
+    st.session_state['font_guide_shown'] = True
+    
     st.sidebar.markdown("""
-    ### 💡 한글 폰트 설치 안내
+    ### 💡 한글 폰트 안내
     
     **Linux 환경에서 한글 폰트 설치:**
     ```bash
@@ -91,9 +104,8 @@ def show_korean_font_installation_guide():
     fc-list | grep -i nanum
     ```
     
-    **설치 후 확인:**
-    - 시스템을 재시작하거나 애플리케이션을 재실행하세요.
-    - 폰트가 설치되면 자동으로 한글이 올바르게 표시됩니다.
+    **웹 폰트를 사용 중입니다:**
+    로컬 폰트가 없어도 웹 폰트를 통해 한글이 표시됩니다.
     """)
 
 # 한글 폰트 설정 함수
@@ -107,10 +119,14 @@ def set_korean_font():
         # 시스템에 설치된 한글 폰트 목록 확인
         korean_fonts = get_korean_fonts()
         
-        # 한글 폰트가 없으면 설치 안내 표시
-        if not korean_fonts:
+        # 폰트 설정 상태 저장
+        st.session_state['korean_font_set'] = True
+        
+        # 한글 폰트가 부족하면 설치 안내 표시 (경고는 로그에만 남기고 UI에는 표시하지 않음)
+        if len(korean_fonts) < 2:  # 기본 폰트 외에 한글 폰트가 없으면
+            logger.warning("한글 폰트가 부족합니다.")
             show_korean_font_installation_guide()
-            
+        
         # 나눔 폰트 우선 순위 설정
         prioritized_fonts = [f for f in korean_fonts if 'nanum' in f.lower()]
         prioritized_fonts += [f for f in korean_fonts if 'nanum' not in f.lower()]
@@ -146,17 +162,22 @@ def set_korean_font():
         # 폰트 설정
         if found_font:
             plt.rc('font', family=found_font)
-            st.session_state['korean_font_set'] = True
             logger.info(f"한글 폰트 설정 완료: {found_font}")
         else:
+            # 한글 폰트 못 찾았을 때 sans-serif 설정
             plt.rc('font', family='sans-serif')
+            
+            # 경고 메시지는 로그에만 남기고 UI에는 표시하지 않음
             logger.warning("한글 폰트를 찾을 수 없습니다.")
+            
+            # 가이드 표시 대신 웹 폰트로 대체 안내
+            show_korean_font_installation_guide()
         
         # 폰트 설정 확인
         plt.rc('axes', unicode_minus=False)  # 마이너스 기호 깨짐 방지
         
     except Exception as e:
-        # 오류 발생 시 기본 폰트 설정
+        # 오류 발생 시 기본 폰트 설정 (오류 메시지는 로그에만 남김)
         plt.rc('font', family='sans-serif')
         logger.warning(f"폰트 설정 중 오류 발생: {str(e)}")
 
@@ -195,7 +216,6 @@ def apply_korean_font_to_pyvis(net):
         font_options_script = f"""
         <script>
         document.addEventListener("DOMContentLoaded", function() {{
-            // 네트워크가 이미 초기화된 후에 실행
             setTimeout(function() {{
                 try {{
                     // 노드 폰트 옵션 설정
@@ -229,8 +249,8 @@ def apply_korean_font_to_pyvis(net):
         
         # 직접 pyvis 옵션으로 설정 (기본 방식)
         try:
-            # 폰트 설정 옵션 추가
-            net.set_options(f'''
+            # 폰트 설정 옵션 문자열 생성
+            options_str = f'''
             {{
                 "nodes": {{
                     "font": {{
@@ -245,9 +265,16 @@ def apply_korean_font_to_pyvis(net):
                     }}
                 }}
             }}
-            ''')
+            '''
+            
+            # 옵션 적용 시도 (조용히 실패 처리)
+            try:
+                net.set_options(options_str)
+            except:
+                pass  # 실패해도 경고 없이 계속 진행
+                
         except:
-            logger.warning("PyVis 옵션 직접 설정 실패")
+            pass  # 조용히 실패 처리
         
         # 스크립트를 HTML 본문 끝에 추가
         if "</body>" in net.html:
@@ -257,7 +284,8 @@ def apply_korean_font_to_pyvis(net):
         
         return net
     except Exception as e:
-        logger.warning(f"PyVis 한글 폰트 적용 실패: {str(e)}")
+        # 로그에만 기록하고 사용자에게는 표시하지 않음
+        logger.debug(f"PyVis 한글 폰트 적용 시 오류 발생: {str(e)}")
         return net
 
 # 한글을 영문으로 변환하는 함수 (폰트 문제 대비)
@@ -314,11 +342,18 @@ class NetworkVisualizer:
         
         # 한글 폰트 설정 및 확인
         set_korean_font()
-        self.has_korean_font = self._check_korean_font()
         
-        # Streamlit Cloud 환경에서는 자동으로 로마자화 사용
-        if is_streamlit_cloud():
+        # 폰트 확인을 한 번만 실행하고 결과를 저장 (경고 메시지 중복 방지)
+        if 'has_korean_font' in st.session_state:
+            self.has_korean_font = st.session_state['has_korean_font']
+        else:
+            self.has_korean_font = self._check_korean_font()
+            st.session_state['has_korean_font'] = self.has_korean_font
+        
+        # Streamlit Cloud 환경에서는 자동으로 로마자화 사용 (경고 메시지 중복 방지)
+        if is_streamlit_cloud() and self.has_korean_font:
             self.has_korean_font = False
+            st.session_state['has_korean_font'] = False
             
         # 노드 이름 매핑 (원래 이름 -> 로마자화된 이름)
         self.name_mapping = {}
@@ -612,13 +647,12 @@ class NetworkVisualizer:
                 # 표시할 이름(라벨) 설정 - 한글 폰트 없을 경우 로마자화
                 display_label = self._get_display_label(node)
                 
-                # 툴팁(hover) 텍스트 설정 - 더 상세한 정보
-                title = f"<div style='font-size:14px; font-weight:bold;'>{node}</div>"
-                title += f"<hr style='margin:2px'>"
-                title += f"<div><b>인기도(In)</b>: {in_degree.get(node, 0)}</div>"
-                title += f"<div><b>친밀도(Out)</b>: {out_degree.get(node, 0)}</div>"
-                title += f"<div><b>중재자 역할</b>: {betweenness.get(node, 0):.3f}</div>"
-                title += f"<div><b>그룹번호</b>: {comm_id}</div>"
+                # 툴팁(hover) 텍스트 설정 - HTML 태그 대신 일반 텍스트로 변경
+                title = f"이름: {node}\n"
+                title += f"인기도(In): {in_degree.get(node, 0)}\n"
+                title += f"친밀도(Out): {out_degree.get(node, 0)}\n"
+                title += f"중재자 역할: {betweenness.get(node, 0):.3f}\n"
+                title += f"그룹번호: {comm_id}"
                 
                 # 노드 추가
                 net.add_node(
@@ -637,22 +671,99 @@ class NetworkVisualizer:
                 weight = data.get('weight', 1)
                 edge_type = data.get('type', 'relationship')
                 
+                # 툴팁 텍스트 (일반 텍스트로)
+                title = f"{source} → {target} (가중치: {weight})"
+                
                 # 엣지 색상 설정 - 기본은 회색, 선택 시 빨간색, 호버 시 파란색
                 net.add_edge(
                     source, target,
                     width=weight * 1.5,  # 굵기 증가
-                    title=f"{source} → {target} ({edge_type})",
+                    title=title,
                     arrowStrikethrough=True,
                     color={'color': '#999999', 'highlight': '#FF0000', 'hover': '#007bff'}
                 )
             
-            # 한글 폰트 적용
+            # 한글 폰트 적용 - 전역 스타일을 통해 적용
             net = apply_korean_font_to_pyvis(net)
+            
+            # 툴팁 표시 방식 커스터마이징 - HTML 태그 해석 문제 해결
+            tooltip_script = """
+            <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                setTimeout(function() {
+                    try {
+                        if (typeof network !== 'undefined') {
+                            // 툴팁 표시 방식 수정
+                            network.on("hoverNode", function(params) {
+                                let node = network.body.nodes[params.node];
+                                if (node && node.options && node.options.title) {
+                                    // 툴팁 텍스트 가져오기
+                                    let tooltipText = node.options.title;
+                                    
+                                    // 줄바꿈을 <br>로 변환
+                                    tooltipText = tooltipText.replace(/\\n/g, '<br>');
+                                    
+                                    // 커스텀 툴팁 생성
+                                    let tooltip = document.createElement('div');
+                                    tooltip.id = 'custom-tooltip';
+                                    tooltip.innerHTML = tooltipText;
+                                    tooltip.style.position = 'absolute';
+                                    tooltip.style.padding = '8px';
+                                    tooltip.style.background = 'rgba(255, 255, 255, 0.9)';
+                                    tooltip.style.border = '1px solid #ccc';
+                                    tooltip.style.borderRadius = '4px';
+                                    tooltip.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                                    tooltip.style.pointerEvents = 'none';
+                                    tooltip.style.fontFamily = "'Nanum Gothic', 'Malgun Gothic', sans-serif";
+                                    tooltip.style.zIndex = '1000';
+                                    
+                                    // 화면에 추가
+                                    document.body.appendChild(tooltip);
+                                    
+                                    // 위치 설정
+                                    let canvasRect = network.canvas.frame.getBoundingClientRect();
+                                    let nodePosition = network.getPositions([params.node])[params.node];
+                                    let canvasPosition = network.canvasToDOM(nodePosition);
+                                    
+                                    tooltip.style.left = (canvasRect.left + canvasPosition.x + 10) + 'px';
+                                    tooltip.style.top = (canvasRect.top + canvasPosition.y + 10) + 'px';
+                                }
+                            });
+                            
+                            // 마우스가 노드를 벗어나면 툴팁 제거
+                            network.on("blurNode", function(params) {
+                                let tooltip = document.getElementById('custom-tooltip');
+                                if (tooltip) {
+                                    tooltip.parentNode.removeChild(tooltip);
+                                }
+                            });
+                        }
+                    } catch(e) {
+                        console.error("툴팁 커스텀 오류:", e);
+                    }
+                }, 1000);
+            });
+            </script>
+            """
             
             # 임시 파일로 저장
             temp_dir = tempfile.gettempdir()
             html_path = os.path.join(temp_dir, "network.html")
             net.save_graph(html_path)
+            
+            # 툴팁 스크립트 추가
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # 스크립트 추가
+            if "</body>" in html_content:
+                html_content = html_content.replace("</body>", tooltip_script + "</body>")
+            else:
+                html_content += tooltip_script
+            
+            # 수정된 내용으로 파일 다시 저장
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
             
             # 한글 지원 여부에 따른 안내 메시지
             if not self.has_korean_font:
@@ -671,6 +782,7 @@ class NetworkVisualizer:
             return html_path
             
         except Exception as e:
+            logger.warning(f"인터랙티브 네트워크 생성 중 오류 발생: {str(e)}")
             st.error(f"인터랙티브 네트워크 생성 중 오류가 발생했습니다: {str(e)}")
             return None
     
