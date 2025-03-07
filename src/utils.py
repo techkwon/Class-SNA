@@ -59,29 +59,64 @@ def export_to_excel(network_data, analysis_results, filename="network_analysis.x
         # Excel 작성기 생성
         with pd.ExcelWriter(output, engine=engine) as writer:
             # 노드 데이터 저장
-            network_data["nodes"].to_excel(writer, sheet_name="Nodes", index=False)
+            if "nodes" in network_data and isinstance(network_data["nodes"], pd.DataFrame):
+                network_data["nodes"].to_excel(writer, sheet_name="Nodes", index=False)
             
             # 엣지 데이터 저장
-            network_data["edges"].to_excel(writer, sheet_name="Edges", index=False)
+            if "edges" in network_data and isinstance(network_data["edges"], pd.DataFrame):
+                network_data["edges"].to_excel(writer, sheet_name="Edges", index=False)
             
             # 중심성 지표 저장
-            if "centrality" in analysis_results:
-                # DataFrame으로 변환 (xlsxwriter와 호환되도록)
-                centrality_df = pd.DataFrame()
-                for metric_name, values in analysis_results["centrality"].items():
-                    centrality_df[metric_name] = pd.Series(values)
-                
-                centrality_df.to_excel(writer, sheet_name="Centrality", index=True)
+            if "centrality" in analysis_results and analysis_results["centrality"]:
+                try:
+                    # DataFrame으로 변환 (xlsxwriter와 호환되도록)
+                    centrality_df = pd.DataFrame()
+                    for metric_name, values in analysis_results["centrality"].items():
+                        if isinstance(values, dict):  # 딕셔너리인 경우만 처리
+                            centrality_df[metric_name] = pd.Series(values)
+                    
+                    if not centrality_df.empty:
+                        centrality_df.to_excel(writer, sheet_name="Centrality", index=True)
+                except Exception as e:
+                    logger.warning(f"중심성 지표 저장 실패: {str(e)}")
             
             # 커뮤니티 정보 저장
             if "communities" in analysis_results:
-                pd.DataFrame(analysis_results["communities"]).to_excel(writer, sheet_name="Communities", index=False)
+                try:
+                    communities_data = analysis_results["communities"]
+                    
+                    # 데이터 형식 확인 및 변환
+                    if isinstance(communities_data, pd.DataFrame):
+                        # 이미 DataFrame인 경우
+                        communities_data.to_excel(writer, sheet_name="Communities", index=False)
+                    elif isinstance(communities_data, dict):
+                        # 딕셔너리인 경우 (community_id: [members]) 변환
+                        community_rows = []
+                        for comm_id, members in communities_data.items():
+                            if isinstance(members, (list, tuple, set)):
+                                for member in members:
+                                    community_rows.append({"Community_ID": comm_id, "Member": member})
+                            else:
+                                # 멤버가 단일 값인 경우
+                                community_rows.append({"Community_ID": comm_id, "Member": members})
+                        
+                        pd.DataFrame(community_rows).to_excel(writer, sheet_name="Communities", index=False)
+                    elif isinstance(communities_data, (list, tuple)):
+                        # 리스트인 경우
+                        pd.DataFrame(communities_data).to_excel(writer, sheet_name="Communities", index=False)
+                    else:
+                        logger.warning(f"커뮤니티 데이터 형식 오류: {type(communities_data)}")
+                except Exception as e:
+                    logger.warning(f"커뮤니티 정보 저장 실패: {str(e)}")
             
             # 요약 통계 저장
-            if "summary" in analysis_results:
-                # 딕셔너리를 DataFrame으로 변환하여 저장
-                summary_df = pd.DataFrame([analysis_results["summary"]])
-                summary_df.to_excel(writer, sheet_name="Summary", index=False)
+            if "summary" in analysis_results and analysis_results["summary"]:
+                try:
+                    # 딕셔너리를 DataFrame으로 변환하여 저장
+                    summary_df = pd.DataFrame([analysis_results["summary"]])
+                    summary_df.to_excel(writer, sheet_name="Summary", index=False)
+                except Exception as e:
+                    logger.warning(f"요약 통계 저장 실패: {str(e)}")
         
         # BytesIO 데이터 가져오기
         data = output.getvalue()

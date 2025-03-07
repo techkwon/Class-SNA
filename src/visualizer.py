@@ -23,6 +23,7 @@ warnings.filterwarnings("ignore", "findfont: Font family .* not found")
 warnings.filterwarnings("ignore", category=UserWarning, module='matplotlib')
 warnings.filterwarnings("ignore", category=UserWarning, module='plotly')
 warnings.filterwarnings("ignore", category=UserWarning, module='pyvis')
+warnings.filterwarnings("ignore", "Substituting symbol .* form .* font")
 
 # 로깅 설정 - 파일 핸들러 추가하여 로그를 화면에 출력하지 않고 파일로 저장
 logging.basicConfig(level=logging.INFO, filename='network_analysis.log', filemode='w')
@@ -819,174 +820,170 @@ class NetworkVisualizer:
             df = pd.DataFrame(metric_values.items(), columns=['name', 'value'])
             df = df.sort_values('value', ascending=False).head(top_n)
             
-            # 원본 한글 이름 및 영문 표시 이름 컬럼 추가
-            df['original_name'] = df['name']  # 원본 한글 이름 저장
-            df['display_name'] = df['name'].apply(lambda x: romanize_korean(x))  # 영문 표시 이름
+            # 원본 이름과 영문 표시 이름 매핑
+            name_mapping = {}
+            for name in df['name']:
+                if re.search(r'[가-힣]', name):  # 한글이 포함된 경우만 변환
+                    name_mapping[name] = romanize_korean(name)
+                else:
+                    name_mapping[name] = name
             
-            # 폰트 설정 (한글 지원용)
-            plt.rcParams['font.family'] = ['Malgun Gothic', 'AppleGothic', 'NanumGothic', 'sans-serif']
+            # 역방향 매핑 (로마자 -> 원본)
+            reverse_mapping = {v: k for k, v in name_mapping.items()}
             
-            # Windows일 경우 폰트 추가 설정
-            if platform.system() == 'Windows':
-                from matplotlib import font_manager
-                font_manager.fontManager.addfont('C:/Windows/Fonts/malgun.ttf')
-                
-            # 그래프 생성 (영문 이름으로 그래프 생성)
+            # 영문 이름으로 데이터프레임 변환
+            df['display_name'] = df['name'].map(name_mapping)
+            
+            # matplotlib 기본 폰트 설정 (영문 사용으로 한글 문제 우회)
+            plt.rcParams['font.family'] = 'DejaVu Sans'
+            
+            # 그래프 생성
             fig, ax = plt.subplots(figsize=(10, 8))
             
-            # 색상 설정
+            # 컬러 팔레트 (구글 색상 사용)
             colors = ['#4285F4', '#EA4335', '#34A853', '#FBBC05', '#8E24AA', '#16A085']
             
-            # 데이터 정렬 순서에 따라 영문 이름 레이블 준비 (한글 깨짐 방지)
-            # 지표 값이 같은 학생들이 여럿이면 정렬이 불안정할 수 있으므로 인덱스 사용
-            df = df.reset_index(drop=True)
-            labels = []
-            for i, row in df.iterrows():
-                # 이름에 한글이 있으면 영문 표시
-                if re.search(r'[가-힣]', row['name']):
-                    labels.append(row['display_name'])
-                else:
-                    labels.append(row['name'])
-            
             # 반전된 순서로 그래프 생성 (위에서 아래로 내림차순)
-            y_pos = range(len(labels))
-            bars = ax.barh(y_pos, df['value'], color=[colors[i % len(colors)] for i in range(len(labels))])
+            bars = ax.barh(df['display_name'], df['value'], 
+                         color=[colors[i % len(colors)] for i in range(len(df))])
             
-            # y축 레이블 설정 (영문 이름)
-            ax.set_yticks(y_pos)
-            ax.set_yticklabels(labels)
+            # 그래프 스타일링 
+            ax.set_xlabel('Centrality Value', fontsize=12)
             
-            # 그래프 스타일링 (한글 레이블)
-            ax.set_xlabel('중심성 지표 값', fontsize=12)
-            
-            # 중심성 지표별 적절한 제목 설정 (한글)
+            # 중심성 지표별 적절한 제목 설정
             metric_titles = {
-                'in_degree': '인기도 (선택받은 횟수)',
-                'out_degree': '친밀도 (선택한 횟수)',
-                'betweenness': '중재자 역할',
-                'closeness': '정보 접근성'
+                'in_degree': 'In-Degree Centrality',
+                'out_degree': 'Out-Degree Centrality',
+                'betweenness': 'Betweenness Centrality',
+                'closeness': 'Closeness Centrality'
             }
             title = metric_titles.get(metric, metric)
-            ax.set_title(f'상위 {top_n}명 학생의 {title}', fontsize=14, pad=20)
+            ax.set_title(f'Top {top_n} Students - {title}', fontsize=14, pad=20)
             
             # 값 주석 추가
-            for i, bar in enumerate(bars):
+            for bar in bars:
                 width = bar.get_width()
-                ax.text(width + 0.01, i, f'{width:.2f}', va='center', fontsize=10)
-                
+                ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
+                       f'{width:.2f}', va='center', fontsize=10)
+            
             # 그리드 추가
             ax.grid(axis='x', linestyle='--', alpha=0.6)
             
             # 레이아웃 조정
             plt.tight_layout()
             
-            # 매핑 테이블 스트림릿으로 표시 (한글 UI)
-            st.subheader("📋 영문 표기와 한글 이름 대응표")
-            col1, col2 = st.columns(2)
+            # 한글-영문 매핑 표 표시 (UI 텍스트는 한글 사용)
+            st.markdown("### 📋 학생 이름 매핑 참조표")
+            st.write("그래프는 영문으로 표시되지만, 아래 표에서 원래 한글 이름을 확인하실 수 있습니다.")
             
-            with col1:
-                st.write("**👉 그래프에 표시된 이름**")
-                for name in df['display_name']:
-                    st.write(name)
-                    
-            with col2:
-                st.write("**👉 실제 한글 이름**")
-                for name in df['original_name']:
-                    st.write(name)
+            # 데이터프레임으로 표시
+            mapping_df = pd.DataFrame({
+                "그래프 표시 이름": list(name_mapping.values()),
+                "원래 한글 이름": list(name_mapping.keys())
+            })
+            
+            # name_mapping이 비어있지 않으면 표시
+            if not mapping_df.empty:
+                st.dataframe(mapping_df)
             
             return fig
             
         except Exception as e:
+            logger.error(f"중심성 지표 시각화 중 오류 발생: {str(e)}")
             st.error(f"중심성 지표 시각화 중 오류가 발생했습니다: {str(e)}")
             return None
     
     def create_community_table(self):
         """커뮤니티별 학생 목록 생성"""
         try:
-            if not self.communities:
-                self.analyzer.detect_communities()
+            # 커뮤니티 데이터가 없으면 가져오기
+            if not hasattr(self, 'communities') or not self.communities:
+                # 애널라이저가 있는지 확인
+                if hasattr(self, 'analyzer') and self.analyzer:
+                    self.communities = self.analyzer.detect_communities()
+                else:
+                    # 애널라이저가 없으면 빈 데이터 반환
+                    logger.warning("커뮤니티 테이블 생성 실패: analyzer가 설정되지 않았습니다.")
+                    return pd.DataFrame(columns=["그룹 ID", "학생 수", "주요 학생"])
+            
+            if not self.communities or not isinstance(self.communities, dict):
+                # 커뮤니티 데이터가 없거나 형식이 잘못된 경우 빈 데이터 반환
+                logger.warning(f"커뮤니티 테이블 생성 실패: 잘못된 커뮤니티 데이터 형식 {type(self.communities)}")
+                return pd.DataFrame(columns=["그룹 ID", "학생 수", "주요 학생"])
             
             # 커뮤니티별 학생 그룹화
             community_groups = {}
-            for node, community_id in self.communities.items():
-                if community_id not in community_groups:
-                    community_groups[community_id] = []
-                community_groups[community_id].append(node)
+            try:
+                for node, community_id in self.communities.items():
+                    if community_id not in community_groups:
+                        community_groups[community_id] = []
+                    community_groups[community_id].append(node)
+            except AttributeError:
+                # 커뮤니티 데이터 형식이 예상과 다른 경우
+                logger.warning("커뮤니티 데이터 형식이 예상과 다릅니다")
+                # 이미 그룹화된 형태일 수 있음
+                if isinstance(self.communities, dict):
+                    community_groups = self.communities
+            
+            if not community_groups:
+                logger.warning("커뮤니티 그룹을 생성할 수 없습니다")
+                return pd.DataFrame(columns=["그룹 ID", "학생 수", "주요 학생"])
             
             # 한글 폰트 문제 확인 및 대응
-            use_romanized = not self.has_korean_font
+            use_romanized = False
+            if hasattr(self, 'has_korean_font'):
+                use_romanized = not self.has_korean_font
             
             # 커뮤니티별 데이터 준비
             data = []
             for comm_id, members in community_groups.items():
+                if not isinstance(members, (list, tuple, set)):
+                    # 멤버가 리스트가 아닌 경우 (단일 값)
+                    members = [members]
+                
                 # 중심성 지표가 높은 학생 식별
-                if self.metrics:
-                    # in_degree 기준 중심 학생 식별
-                    central_student = max(members, key=lambda x: self.metrics["in_degree"].get(x, 0))
-                    central_value = self.metrics["in_degree"].get(central_student, 0)
+                central_student = ""
+                central_value = 0
+                
+                if hasattr(self, 'metrics') and self.metrics:
+                    # in_degree 기준 중심 학생 식별 시도
+                    try:
+                        if "in_degree" in self.metrics and self.metrics["in_degree"]:
+                            # 중심성 값이 가장 높은 학생 찾기
+                            central_student = max(members, key=lambda x: self.metrics["in_degree"].get(x, 0))
+                            central_value = self.metrics["in_degree"].get(central_student, 0)
+                    except Exception as e:
+                        logger.warning(f"중심 학생 식별 실패: {str(e)}")
+                
+                # 로마자화된 이름 사용 여부 결정
+                if use_romanized and hasattr(self, 'romanize_korean'):
+                    # 이름 변환 시도
+                    try:
+                        member_names = [self.romanize_korean(str(m)) for m in members]
+                        central_student_name = self.romanize_korean(str(central_student)) if central_student else ""
+                    except Exception as e:
+                        logger.warning(f"이름 로마자화 실패: {str(e)}")
+                        member_names = [str(m) for m in members]
+                        central_student_name = str(central_student)
                 else:
-                    central_student = ""
-                    central_value = 0
+                    member_names = [str(m) for m in members]
+                    central_student_name = str(central_student)
                 
-                # 한글 폰트 문제가 있으면 로마자 변환
-                if use_romanized:
-                    # 중심 학생 이름 변환
-                    central_student_display = self._get_display_label(central_student, use_romanized=True)
-                    
-                    # 소속 학생 목록 변환
-                    members_display = [self._get_display_label(m, use_romanized=True) for m in members]
-                    members_str = ", ".join(members_display)
-                    
-                    # 원본 이름과 로마자 매핑 정보 표시
-                    member_mapping = {self._get_display_label(m, use_romanized=True): m for m in members}
-                    
-                    data.append({
-                        "커뮤니티 ID": comm_id,
-                        "학생 수": len(members),
-                        "소속 학생": members_str,
-                        "중심 학생": central_student_display,
-                        "중심 학생 연결성": f"{central_value:.3f}",
-                        # 원본 이름 정보 저장
-                        "학생 매핑": member_mapping
-                    })
-                else:
-                    data.append({
-                        "커뮤니티 ID": comm_id,
-                        "학생 수": len(members),
-                        "소속 학생": ", ".join(members),
-                        "중심 학생": central_student,
-                        "중심 학생 연결성": f"{central_value:.3f}"
-                    })
+                data.append({
+                    "그룹 ID": comm_id,
+                    "학생 수": len(members),
+                    "주요 학생": central_student_name if central_student else "",
+                    "중심성 값": central_value,
+                    "소속 학생": ", ".join(member_names)
+                })
             
-            # 데이터프레임 생성
-            df = pd.DataFrame(data)
-            
-            # 한글 폰트 문제가 있는 경우 매핑 테이블 표시
-            if use_romanized:
-                st.info("한글 폰트 문제로 인해 학생 이름이 영문으로 표시됩니다.")
-                
-                # 매핑 정보 표시
-                with st.expander("학생 이름 매핑 테이블", expanded=False):
-                    all_mappings = {}
-                    for row in data:
-                        all_mappings.update(row.get("학생 매핑", {}))
-                    
-                    mapping_df = pd.DataFrame({
-                        "영문 표시": list(all_mappings.keys()),
-                        "원래 이름": list(all_mappings.values())
-                    })
-                    st.dataframe(mapping_df)
-                
-                # 매핑 정보는 테이블에서 제거
-                if "학생 매핑" in df.columns:
-                    df = df.drop(columns=["학생 매핑"])
-            
-            return df
+            # 데이터프레임 생성 및 반환
+            return pd.DataFrame(data)
             
         except Exception as e:
             logger.error(f"커뮤니티 테이블 생성 실패: {str(e)}")
-            st.error(f"커뮤니티 테이블 생성 중 오류가 발생했습니다: {str(e)}")
-            return pd.DataFrame(columns=["커뮤니티 ID", "학생 수", "소속 학생", "중심 학생", "중심 학생 연결성"])
+            # 오류 시 빈 데이터프레임 반환
+            return pd.DataFrame(columns=["그룹 ID", "학생 수", "주요 학생"])
     
     def get_centrality_metrics(self):
         """중심성 지표 반환 - analyzer의 지표를 사용"""
