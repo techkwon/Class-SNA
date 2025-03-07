@@ -20,7 +20,6 @@ fonttools==4.46.0
 matplotlib-inline==0.1.6
 # Streamlit Cloud에서 작동 가능한 폰트 패키지
 font-roboto==0.0.1
-webfont==1.1.1
 # 한글 폰트 패키지 - 시스템에 직접 설치해야함 (apt-get install fonts-nanum)
 # CSV 파일 다운로드 오류 처리 패키지
 urllib3==2.2.0

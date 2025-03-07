@@ -125,32 +125,65 @@ def set_korean_font():
 def apply_korean_font_to_pyvis(net):
     """PyVis 네트워크에 한글 폰트 설정을 적용합니다."""
     try:
-        # 폰트 패밀리 옵션 설정
-        font_options = """
-        var options = {
-            "nodes": {
-                "font": {
-                    "face": "Nanum Gothic, Malgun Gothic, sans-serif",
-                    "size": 14
-                }
-            }
-        };
-        network.setOptions(options);
-        """
-        
-        # HTML 헤더에 웹폰트 추가
+        # HTML 헤더에 Google Fonts CDN을 통한 웹폰트 추가
         net.html = net.html.replace("<head>", """<head>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Gothic&display=swap">
+        <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic&display=swap" rel="stylesheet">
         <style>
-        body, html, .vis-network {
-            font-family: 'Nanum Gothic', 'Malgun Gothic', sans-serif;
+        body, html, .vis-network, .vis-label {
+            font-family: 'Nanum Gothic', 'Malgun Gothic', sans-serif !important;
+        }
+        .vis-network div.vis-network-tooltip {
+            font-family: 'Nanum Gothic', 'Malgun Gothic', sans-serif !important;
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            border: 1px solid #ccc !important;
+            border-radius: 4px !important;
+            padding: 8px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
         }
         </style>
         """)
         
-        # 스크립트 추가
-        if "</script>" in net.html:
-            net.html = net.html.replace("</script>", font_options + "</script>")
+        # 네트워크 초기화 후 노드 폰트 설정을 위한 JavaScript 추가
+        font_options_script = """
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // 네트워크가 이미 초기화된 후에 실행
+            setTimeout(function() {
+                try {
+                    // 노드 폰트 옵션 설정
+                    var options = {
+                        nodes: {
+                            font: {
+                                face: "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+                                size: 14,
+                                color: '#000000'
+                            }
+                        },
+                        edges: {
+                            font: {
+                                face: "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+                                size: 12
+                            }
+                        }
+                    };
+                    
+                    // 네트워크 객체에 옵션 적용
+                    if (typeof network !== 'undefined') {
+                        network.setOptions(options);
+                    }
+                } catch(e) {
+                    console.error("폰트 설정 중 오류 발생:", e);
+                }
+            }, 1000); // 충분한 시간을 두고 실행
+        });
+        </script>
+        """
+        
+        # 스크립트를 HTML 본문 끝에 추가
+        if "</body>" in net.html:
+            net.html = net.html.replace("</body>", font_options_script + "</body>")
+        else:
+            net.html += font_options_script
         
         return net
     except Exception as e:
