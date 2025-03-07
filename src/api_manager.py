@@ -2,6 +2,7 @@ import google.generativeai as genai
 import logging
 import time
 import streamlit as st
+import requests
 from config import get_random_api_key, APP_SETTINGS
 
 # 로깅 설정
@@ -52,6 +53,43 @@ class APIManager:
         except ValueError as e:
             logger.error(f"API 키 전환 실패: {str(e)}")
             raise
+    
+    def request_data(self, url, max_retries=3):
+        """HTTP 요청을 통해 데이터 요청
+        
+        Args:
+            url (str): 요청할 URL
+            max_retries (int): 최대 재시도 횟수
+            
+        Returns:
+            bytes: 응답 데이터 (바이너리)
+            
+        Raises:
+            ConnectionError: 연결 실패 시
+            Exception: 기타 요청 실패 시
+        """
+        retries = 0
+        while retries < max_retries:
+            try:
+                logger.debug(f"HTTP 요청: {url}")
+                response = requests.get(url, timeout=10)
+                
+                if response.status_code == 200:
+                    logger.debug("HTTP 요청 성공")
+                    return response.content
+                else:
+                    logger.warning(f"HTTP 요청 실패 (상태 코드: {response.status_code})")
+                    retries += 1
+                    time.sleep(1)  # 재시도 전 대기
+            
+            except requests.exceptions.RequestException as e:
+                logger.error(f"HTTP 요청 오류: {str(e)}")
+                retries += 1
+                if retries >= max_retries:
+                    raise ConnectionError(f"데이터 요청 실패: {str(e)}")
+                time.sleep(1)  # 재시도 전 대기
+                
+        raise Exception(f"최대 재시도 횟수 초과: {url}")
     
     def generate_response(self, prompt, max_retries=3):
         """Gemini API를 사용하여 응답 생성"""
