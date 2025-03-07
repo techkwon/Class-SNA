@@ -30,14 +30,76 @@ class NetworkAnalyzer:
             
             # 노드 추가
             for _, row in self.nodes_df.iterrows():
-                G.add_node(row["id"], label=row["label"])
+                try:
+                    # 'id'와 'label' 필드가 있는지 확인
+                    node_id = row["id"]
+                    
+                    # 노드 속성 딕셔너리 생성
+                    node_attrs = {}
+                    
+                    # 'label' 필드가 있으면 추가
+                    if 'label' in row:
+                        node_attrs['label'] = row['label']
+                    elif 'name' in row:
+                        # 'label'이 없고 'name'이 있으면 이를 'label'로 사용
+                        node_attrs['label'] = row['name']
+                    else:
+                        # 둘 다 없으면 ID를 문자열로 변환하여 사용
+                        node_attrs['label'] = str(node_id)
+                    
+                    # 'group' 필드가 있으면 추가
+                    if 'group' in row:
+                        node_attrs['group'] = row['group']
+                    
+                    # 노드 추가
+                    G.add_node(node_id, **node_attrs)
+                
+                except Exception as e:
+                    logger.warning(f"노드 추가 중 오류 발생: {str(e)}, 행: {row}")
+                    continue
             
             # 엣지 추가
             for _, row in self.edges_df.iterrows():
-                if "weight" in row:
-                    G.add_edge(row["from"], row["to"], weight=row["weight"])
-                else:
-                    G.add_edge(row["from"], row["to"], weight=1)
+                try:
+                    # 'from'과 'to' 필드가 있는지 확인
+                    if 'from' in row and 'to' in row:
+                        source = row['from']
+                        target = row['to']
+                    # 이전 형식의 'source'와 'target' 필드도 지원
+                    elif 'source' in row and 'target' in row:
+                        source = row['source']
+                        target = row['target']
+                    else:
+                        logger.warning(f"엣지 필드 누락: {row}")
+                        continue
+                    
+                    # 가중치 추가
+                    if 'weight' in row:
+                        weight = row['weight']
+                    elif 'value' in row:
+                        weight = row['value']
+                    else:
+                        weight = 1
+                    
+                    # 타입 정보 추가
+                    edge_attrs = {'weight': weight}
+                    if 'type' in row:
+                        edge_attrs['type'] = row['type']
+                    
+                    # 엣지 추가 - 노드가 존재할 때만
+                    if source in G and target in G:
+                        G.add_edge(source, target, **edge_attrs)
+                    else:
+                        missing = []
+                        if source not in G:
+                            missing.append(f"source={source}")
+                        if target not in G:
+                            missing.append(f"target={target}")
+                        logger.warning(f"존재하지 않는 노드를 참조하는 엣지: {', '.join(missing)}")
+                
+                except Exception as e:
+                    logger.warning(f"엣지 추가 중 오류 발생: {str(e)}, 행: {row}")
+                    continue
             
             self.graph = G
             logger.info(f"그래프 생성 완료: 노드 {G.number_of_nodes()}개, 엣지 {G.number_of_edges()}개")

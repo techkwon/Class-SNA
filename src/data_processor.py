@@ -356,6 +356,7 @@ class DataProcessor:
             student_node = {
                 'id': i,
                 'name': student,
+                'label': student,  # 레이블 필드 추가
                 'group': 1  # 기본 그룹, 나중에 커뮤니티 탐지로 업데이트
             }
             network_data['students'].append(student_node)
@@ -410,18 +411,18 @@ class DataProcessor:
                                 if target and target in name_to_id:
                                     target_id = name_to_id[target]
                                     relationships.append({
-                                        'source': source_id,
-                                        'target': target_id,
+                                        'from': source_id,   # from으로 변경
+                                        'to': target_id,    # to로 변경
                                         'type': rel_type,
-                                        'value': 1
+                                        'weight': 1          # value를 weight로 변경
                                     })
                 
                 # 중복 관계 처리 (같은 source-target 쌍)
                 merged_relationships = {}
                 for rel in relationships:
-                    key = (rel['source'], rel['target'], rel['type'])
+                    key = (rel['from'], rel['to'], rel['type'])
                     if key in merged_relationships:
-                        merged_relationships[key]['value'] += rel['value']
+                        merged_relationships[key]['weight'] += rel['weight']
                     else:
                         merged_relationships[key] = rel
                 
@@ -450,8 +451,8 @@ class DataProcessor:
         except Exception as e:
             logger.error(f"데이터프레임 변환 오류: {str(e)}")
             # 기본 빈 데이터프레임 생성
-            network_data['nodes'] = pd.DataFrame(columns=['id', 'name', 'group'])
-            network_data['edges'] = pd.DataFrame(columns=['source', 'target', 'type', 'value'])
+            network_data['nodes'] = pd.DataFrame(columns=['id', 'name', 'label', 'group'])
+            network_data['edges'] = pd.DataFrame(columns=['from', 'to', 'type', 'weight'])
         
         logger.info(f"네트워크 데이터 변환 완료: {len(network_data['students'])}명의 학생, {len(network_data['relationships'])}개의 관계")
         return network_data
@@ -497,10 +498,10 @@ class DataProcessor:
                     # 확률에 따라 관계 생성
                     if np.random.random() < prob:
                         relationships.append({
-                            'source': source_id,
-                            'target': target_id,
+                            'from': source_id,  # source를 from으로 수정
+                            'to': target_id,    # target을 to로 수정
                             'type': str(rel_type),
-                            'value': np.random.randint(1, 4)  # 1-3 사이의 강도
+                            'weight': np.random.randint(1, 4)  # value를 weight로 수정
                         })
         
         return relationships
@@ -536,10 +537,10 @@ class DataProcessor:
                 for target_id in targets:
                     rel_type = np.random.choice(rel_types)
                     relationships.append({
-                        'source': source_id,
-                        'target': target_id,
+                        'from': source_id,  # source를 from으로 수정
+                        'to': target_id,    # target을 to로 수정
                         'type': rel_type,
-                        'value': np.random.randint(1, 4)  # 1-3 사이의 강도
+                        'weight': np.random.randint(1, 4)  # value를 weight로 수정
                     })
         
         return relationships
