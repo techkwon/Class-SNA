@@ -38,70 +38,38 @@ def is_streamlit_cloud():
 def set_korean_font():
     """matplotlib에서 한글 폰트를 사용하도록 설정"""
     try:
-        # Streamlit Cloud 환경 확인 - 전역 함수 사용
-        if is_streamlit_cloud():
-            # Nanum Gothic Coding 폰트 설정 시도
-            try:
-                import matplotlib.font_manager as fm
-                # Nanum Gothic Coding 폰트를 우선 시도
-                plt.rc('font', family='Nanum Gothic Coding')
-                return
-            except:
-                # 폰트 설정 실패 시 기본 폰트 사용
+        # 사용 가능한 폰트 목록 확인
+        font_list = [f.name for f in fm.fontManager.ttflist]
+        
+        # 한글 지원 가능한 폰트 후보 목록 (우선순위 순서)
+        korean_fonts = [
+            'NanumGothicCoding', 'Nanum Gothic Coding', 'NanumGothic', 'Nanum Gothic',
+            'NanumBarunGothic', 'Nanum Barun Gothic', 'Malgun Gothic', 'Gulim', 'Batang',
+            'AppleGothic', 'Noto Sans KR', 'Noto Sans CJK KR', 'UnDotum', 'Dotum'
+        ]
+        
+        # 시스템에 설치된 한글 폰트 찾기
+        for font in korean_fonts:
+            if any(font.lower() == f.lower() for f in font_list):
+                plt.rc('font', family=font)
                 return
             
-        # 운영체제별 폰트 설정 (로컬 환경)
-        system = platform.system()
-        if system == 'Darwin':  # macOS
-            # Nanum Gothic Coding 폰트를 먼저 시도하고, 실패 시 AppleGothic 사용
-            try:
-                plt.rc('font', family='Nanum Gothic Coding')
-            except:
-                plt.rc('font', family='AppleGothic')
-        elif system == 'Windows':  # Windows
-            # Nanum Gothic Coding 폰트를 먼저 시도하고, 실패 시 Malgun Gothic 사용
-            try:
-                plt.rc('font', family='Nanum Gothic Coding')
-            except:
-                plt.rc('font', family='Malgun Gothic')
-        else:  # Linux 등 (로컬에서만 설치 시도)
-            # 로컬 리눅스인지 Streamlit Cloud인지 추가 확인
-            if "STREAMLIT" in os.environ:
-                # Nanum Gothic Coding 폰트 설정 시도
-                plt.rc('font', family='Nanum Gothic Coding')
+        # 아래 폰트 중 하나라도 일부 매칭되는지 확인 (보다 유연한 매칭)
+        for font in korean_fonts:
+            if any(font.lower() in f.lower() for f in font_list):
+                matching_font = next(f for f in font_list if font.lower() in f.lower())
+                plt.rc('font', family=matching_font)
                 return
-                
-            # 로컬 Linux 환경으로 판단
-            # 이미 설치된 폰트 확인
-            try:
-                # 사용 가능한 시스템 폰트 확인
-                font_list = [f.name for f in fm.fontManager.ttflist]
-                
-                # 한글 지원 가능한 폰트 후보 (Nanum Gothic Coding을 맨 앞에 배치)
-                korean_fonts = ['Nanum Gothic Coding', 'NanumGothicCoding', 'NanumGothic', 'NanumBarunGothic', 'Noto Sans CJK KR', 
-                               'Noto Sans KR', 'Malgun Gothic', 'AppleGothic', 
-                               'Dotum', 'Batang', 'UnDotum', 'Gulim']
-                
-                # 설치된 한글 폰트 찾기
-                found_font = None
-                for font in korean_fonts:
-                    if any(font.lower() in f.lower() for f in font_list):
-                        found_font = font
-                        break
-                
-                if found_font:
-                    plt.rc('font', family=found_font)
-            except Exception:
-                pass
+        
+        # 기본값으로 sans-serif 설정
+        plt.rc('font', family='sans-serif')
         
         # 폰트 설정 확인
         plt.rc('axes', unicode_minus=False)  # 마이너스 기호 깨짐 방지
         
-    except Exception:
-        pass
-
-# 한글 폰트 설정 시도
-set_korean_font()
+    except Exception as e:
+        # 오류 발생 시 기본 폰트 설정
+        plt.rc('font', family='sans-serif')
 
 # 한글을 영문으로 변환하는 함수 (폰트 문제 대비)
 def romanize_korean(text):
