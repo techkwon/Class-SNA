@@ -441,7 +441,7 @@ class NetworkVisualizer:
         nodes = self.analyzer.get_nodes()
         edges = self.analyzer.get_edges()
         
-        # 스트림릿에 안내 메시지 표시
+        # 스트림릿에 안내 메시지 표시 (한글)
         st.info("⚠️ 상호작용 네트워크에서는 한글 표시 문제를 방지하기 위해 영문 이름으로 표시됩니다.")
         
         # 이름 매핑 생성 (원본 → 로마자화)
@@ -450,7 +450,7 @@ class NetworkVisualizer:
             romanized = romanize_korean(node_name)
             name_mapping[romanized] = node_name
         
-        # 매핑 테이블 생성 (펼침/접기 가능한 섹션으로)
+        # 매핑 테이블 생성 (펼침/접기 가능한 섹션으로) - 한글
         with st.expander("👁️ 한글 이름과 영문 표기 대응표 보기"):
             col1, col2 = st.columns(2)
             
@@ -479,7 +479,7 @@ class NetworkVisualizer:
             romanized_name = romanize_korean(node_name)
             
             # 크기 설정 (정규화된 중심성 기반)
-            size = 25 + centrality['degree'][node_name] * 50
+            size = 25 + centrality['in_degree'][node_name] * 50
             if size > 50:
                 size = 50
             
@@ -496,13 +496,13 @@ class NetworkVisualizer:
                     community_id = comm_id
                     break
             
-            # 툴팁 정보 구성 (영어와 한글 둘 다 표시)
-            tooltip = f"{node_name} ({romanized_name})<br>"
-            tooltip += f"Community: {community_id}<br>"
-            tooltip += f"In-degree: {self.analyzer.G.in_degree(node_name)}<br>"
-            tooltip += f"Out-degree: {self.analyzer.G.out_degree(node_name)}"
+            # 툴팁 정보 구성 (한글로 표시, 내부는 영문 사용)
+            tooltip = f"이름: {node_name}<br>"
+            tooltip += f"그룹: {community_id}<br>"
+            tooltip += f"인기도(In): {self.analyzer.graph.in_degree(node_name)}<br>"
+            tooltip += f"친밀도(Out): {self.analyzer.graph.out_degree(node_name)}"
             
-            # 노드 추가 (로마자 이름으로)
+            # 노드 추가 (로마자 이름으로 내부 처리)
             net.add_node(romanized_name, label=romanized_name, title=tooltip, 
                         size=size, color=color)
         
@@ -511,8 +511,11 @@ class NetworkVisualizer:
             romanized_source = romanize_korean(source)
             romanized_target = romanize_korean(target)
             
+            # 툴팁 한글로 표시
+            edge_tooltip = f"관계: {source} → {target}<br>강도: {weight}"
+            
             net.add_edge(romanized_source, romanized_target, value=weight, 
-                         title=f"Weight: {weight}")
+                         title=edge_tooltip)
         
         # 폰트 및 스타일 적용
         net = apply_korean_font_to_pyvis(net)
@@ -575,7 +578,7 @@ class NetworkVisualizer:
         return html
     
     def create_centrality_plot(self, metric="in_degree", top_n=10):
-        """중심성 지표 시각화"""
+        """중심성 지표 시각화 (내부 처리는 영문, 표시는 한글)"""
         try:
             # 지표 선택
             if metric not in self.metrics:
@@ -586,23 +589,21 @@ class NetworkVisualizer:
             metric_values = self.metrics[metric]
             
             # 데이터프레임 변환 및 정렬
-            df = pd.DataFrame(metric_values.items(), columns=['이름', '값'])
-            df = df.sort_values('값', ascending=False).head(top_n)
+            df = pd.DataFrame(metric_values.items(), columns=['name', 'value'])
+            df = df.sort_values('value', ascending=False).head(top_n)
             
-            # 표시 이름 변환
-            if not self.has_korean_font:
-                df['표시이름'] = df['이름'].apply(lambda x: self._get_display_label(x))
-            else:
-                df['표시이름'] = df['이름']
+            # 원본 한글 이름 및 영문 표시 이름 컬럼 추가
+            df['original_name'] = df['name']  # 원본 한글 이름 저장
+            df['display_name'] = df['name'].apply(lambda x: romanize_korean(x))  # 영문 표시 이름
             
-            # 그래프 생성
+            # 그래프 생성 (영문 이름으로 그래프 생성)
             fig, ax = plt.subplots(figsize=(10, 6))
-            bars = ax.barh(df['표시이름'], df['값'], color='skyblue')
+            bars = ax.barh(df['display_name'], df['value'], color='skyblue')
             
-            # 그래프 스타일링
+            # 그래프 스타일링 (한글 레이블)
             ax.set_xlabel('중심성 지표 값')
             
-            # 중심성 지표별 적절한 제목 설정
+            # 중심성 지표별 적절한 제목 설정 (한글)
             metric_titles = {
                 'in_degree': '인기도 (선택받은 횟수)',
                 'out_degree': '친밀도 (선택한 횟수)',
@@ -618,16 +619,18 @@ class NetworkVisualizer:
                 ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
                         f'{width:.2f}', va='center')
             
-            # 범례 추가 - 원본 이름과 표시 이름을 표시
-            if not self.has_korean_font and len(df) > 0:
-                legend_text = "학생 이름 참조표:\n"
-                for _, row in df.iterrows():
-                    orig_name = row['이름']
-                    disp_name = row['표시이름']
-                    if orig_name != disp_name:
-                        legend_text += f"{disp_name} = {orig_name}\n"
-                plt.figtext(0.5, 0.01, legend_text, ha="center", fontsize=9, 
-                           bbox={"facecolor":"lightgrey", "alpha":0.5, "pad":5})
+            # 매핑 테이블 스트림릿으로 표시 (한글 UI)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**👉 그래프에 표시된 이름**")
+                for name in df['display_name']:
+                    st.write(name)
+                    
+            with col2:
+                st.write("**👉 실제 한글 이름**")
+                for name in df['original_name']:
+                    st.write(name)
             
             plt.tight_layout()
             return fig
@@ -722,4 +725,11 @@ class NetworkVisualizer:
         except Exception as e:
             logger.error(f"커뮤니티 테이블 생성 실패: {str(e)}")
             st.error(f"커뮤니티 테이블 생성 중 오류가 발생했습니다: {str(e)}")
-            return pd.DataFrame(columns=["커뮤니티 ID", "학생 수", "소속 학생", "중심 학생", "중심 학생 연결성"]) 
+            return pd.DataFrame(columns=["커뮤니티 ID", "학생 수", "소속 학생", "중심 학생", "중심 학생 연결성"])
+    
+    def get_centrality_metrics(self):
+        """중심성 지표 반환 - analyzer의 지표를 사용"""
+        if not self.metrics:
+            # 중심성 지표가 계산되지 않았다면 계산
+            self.metrics = self.analyzer.metrics
+        return self.metrics 

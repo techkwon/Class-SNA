@@ -212,4 +212,50 @@ class NetworkAnalyzer:
             
         except Exception as e:
             logger.error(f"노드 속성 취합 실패: {str(e)}")
-            raise Exception(f"노드 속성 취합 중 오류가 발생했습니다: {str(e)}") 
+            raise Exception(f"노드 속성 취합 중 오류가 발생했습니다: {str(e)}")
+    
+    def get_nodes(self):
+        """그래프의, 모든 노드(학생 이름) 목록 반환"""
+        return list(self.graph.nodes())
+        
+    def get_edges(self):
+        """그래프의 모든 엣지(관계) 목록 반환
+        반환 형식: [(from_node, to_node, weight), ...]
+        """
+        return [(u, v, data.get('weight', 1)) for u, v, data in self.graph.edges(data=True)]
+        
+    def get_communities(self):
+        """각 커뮤니티에 속한 노드 목록을 반환
+        반환 형식: {community_id: [node1, node2, ...], ...}
+        """
+        if self.communities is None:
+            self.detect_communities()
+            
+        # 커뮤니티별 노드 목록 생성
+        community_nodes = {}
+        for node, community_id in self.communities.items():
+            if community_id not in community_nodes:
+                community_nodes[community_id] = []
+            community_nodes[community_id].append(node)
+            
+        return community_nodes
+        
+    def get_community_colors(self):
+        """각 노드의 커뮤니티 기반 색상 맵을 반환
+        반환 형식: {node: color_hex, ...}
+        """
+        if self.communities is None:
+            self.detect_communities()
+            
+        # 색상 팔레트 정의
+        color_palette = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ]
+        
+        # 각 노드에 커뮤니티 기반 색상 할당
+        node_colors = {}
+        for node, community_id in self.communities.items():
+            node_colors[node] = color_palette[community_id % len(color_palette)]
+            
+        return node_colors 
