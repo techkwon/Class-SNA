@@ -17,28 +17,35 @@ import re
 import warnings
 import subprocess
 
-# matplotlib 경고 메시지 필터링 강화 - 모든 폰트 관련 경고 필터링
+# 모든 matplotlib, plotly 경고 완전히 비활성화
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", "Glyph .* missing from current font")
 warnings.filterwarnings("ignore", "findfont: Font family .* not found")
-warnings.filterwarnings("ignore", category=UserWarning, module='matplotlib')
-warnings.filterwarnings("ignore", category=UserWarning, module='plotly')
-warnings.filterwarnings("ignore", category=UserWarning, module='pyvis')
 warnings.filterwarnings("ignore", "Substituting symbol .* form .* font")
+warnings.filterwarnings("ignore", "No contour levels were found")
+warnings.filterwarnings("ignore", "The PostScript backend does not support transparency")
 
-# 로깅 설정 - 파일 핸들러 추가하여 로그를 화면에 출력하지 않고 파일로 저장
-logging.basicConfig(level=logging.INFO, filename='network_analysis.log', filemode='w')
+# 로깅 설정 - 경고 레벨을 ERROR로 상향 조정하여 WARNING 메시지 숨김
+logging.basicConfig(level=logging.ERROR, filename='network_analysis.log', filemode='w')
 logger = logging.getLogger(__name__)
 # 스트림 핸들러를 제거하여 콘솔에 출력되지 않도록 설정
 logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
 
-# Streamlit Cloud 환경인지 확인하는 함수 - 전역 함수로 정의
+# Streamlit Cloud 환경인지 확인하는 함수
 def is_streamlit_cloud():
     """Streamlit Cloud 환경인지 확인"""
     return os.getenv("STREAMLIT_RUNTIME") is not None or os.getenv("STREAMLIT_RUN_ON_SAVE") is not None
 
+# 전역 변수로 한글 폰트 사용 가능 여부 설정 - 기본값은 False로 설정하여 항상 로마자 사용
+HAS_KOREAN_FONT = False
+
 # 시스템에 설치된 한글 폰트 목록 확인
 def get_korean_fonts():
     """시스템에 설치된 한글 폰트 목록 확인"""
+    global HAS_KOREAN_FONT
+    
     korean_fonts = []
     try:
         # Linux 환경에서 fc-list 명령어 사용
@@ -51,225 +58,192 @@ def get_korean_fonts():
                     font_name = line.split(':')[1].strip().split(',')[0] if ':' in line else ''
                     if font_name and font_name not in korean_fonts:
                         korean_fonts.append(font_name)
-                        
-                # 나눔 폰트 목록 확인
-                result = subprocess.run(['fc-list', '|', 'grep', 'Nanum'], capture_output=True, text=True)
-                for line in result.stdout.splitlines():
-                    font_name = line.split(':')[1].strip().split(',')[0] if ':' in line else ''
-                    if font_name and font_name not in korean_fonts:
-                        korean_fonts.append(font_name)
-            except:
+            except Exception as e:
+                # fc-list 명령 실패 - 명령어가 없거나 실행 권한 없음
                 pass
                 
-        # matplotlib 폰트 매니저 사용
-        for font in fm.fontManager.ttflist:
-            if font.name not in korean_fonts:
-                # 한글 관련 키워드 확인
-                korean_keywords = ['nanum', 'gothic', 'gulim', 'batang', 'dotum', 'malgun', '나눔', '고딕', '굴림', '바탕', '돋움', '맑은']
-                if any(keyword in font.name.lower() for keyword in korean_keywords):
-                    korean_fonts.append(font.name)
+        # Windows 환경에서의 한글 폰트 목록 (일반적인 한글 폰트 이름)
+        elif platform.system() == 'Windows':
+            common_korean_fonts = ['Malgun Gothic', '맑은 고딕', 'Gulim', '굴림', 'Batang', '바탕', 'Dotum', '돋움']
+            for font in fm.findSystemFonts():
+                try:
+                    font_name = fm.FontProperties(fname=font).get_name()
+                    if font_name in common_korean_fonts:
+                        korean_fonts.append(font_name)
+                except:
+                    pass
+                    
+        # macOS 환경에서의 한글 폰트 목록
+        elif platform.system() == 'Darwin':
+            common_korean_fonts = ['AppleGothic', 'AppleMyungjo', 'NanumGothic', 'NanumMyungjo']
+            for font in fm.findSystemFonts():
+                try:
+                    font_name = fm.FontProperties(fname=font).get_name()
+                    if font_name in common_korean_fonts:
+                        korean_fonts.append(font_name)
+                except:
+                    pass
         
-        # 기본 시스템 폰트도 추가 (한글 지원 가능성이 있는 폰트)
-        system_fonts = ['Arial Unicode MS', 'Segoe UI', 'Microsoft Sans Serif', 'Tahoma']
-        for font in system_fonts:
-            if font not in korean_fonts:
-                korean_fonts.append(font)
-                
-    except Exception as e:
-        logger.warning(f"한글 폰트 목록 확인 중 오류 발생: {str(e)}")
+        if korean_fonts:
+            HAS_KOREAN_FONT = True
+        
+        return korean_fonts
     
-    return korean_fonts
+    except Exception as e:
+        # 모든 예외 처리
+        return []
 
-# 한글 폰트 설치 안내
+# 한글 폰트 설치 안내 (Streamlit UI)
 def show_korean_font_installation_guide():
-    """한글 폰트 설치 안내 메시지 표시"""
-    # 이미 안내가 표시되었는지 확인
-    if 'font_guide_shown' in st.session_state and st.session_state['font_guide_shown']:
-        return
+    """한글 폰트 설치 방법 안내"""
+    with st.sidebar.expander("💡 한글 폰트 설치 안내", expanded=False):
+        st.markdown("""
+        ### 📋 한글 폰트 설치 방법
         
-    st.session_state['font_guide_shown'] = True
-    
-    st.sidebar.markdown("""
-    ### 💡 한글 폰트 안내
-    
-    **Linux 환경에서 한글 폰트 설치:**
-    ```bash
-    # 나눔 폰트 설치
-    sudo apt-get update
-    sudo apt-get install fonts-nanum fonts-nanum-coding
-    
-    # 폰트 캐시 갱신
-    sudo fc-cache -fv
-    
-    # 설치된 폰트 확인
-    fc-list | grep -i nanum
-    ```
-    
-    **웹 폰트를 사용 중입니다:**
-    로컬 폰트가 없어도 웹 폰트를 통해 한글이 표시됩니다.
-    """)
-
-# 한글 폰트 설정 함수
-def set_korean_font():
-    """matplotlib에서 한글 폰트를 사용하도록 설정"""
-    try:
-        # 이미 캐시된 한글 폰트 확인 (세션 상태 활용)
-        if 'korean_font_set' in st.session_state and st.session_state['korean_font_set']:
-            return
-            
-        # 시스템에 설치된 한글 폰트 목록 확인
-        korean_fonts = get_korean_fonts()
+        **Ubuntu/Debian Linux**:
+        ```bash
+        sudo apt-get update
+        sudo apt-get install fonts-nanum
+        fc-cache -fv
+        ```
         
-        # 폰트 설정 상태 저장
-        st.session_state['korean_font_set'] = True
+        **macOS**:
+        - [나눔글꼴 다운로드](https://hangeul.naver.com/font) 후 설치
         
-        # 한글 폰트가 부족하면 설치 안내 표시 (경고는 로그에만 남기고 UI에는 표시하지 않음)
-        if len(korean_fonts) < 2:  # 기본 폰트 외에 한글 폰트가 없으면
-            logger.warning("한글 폰트가 부족합니다.")
-            show_korean_font_installation_guide()
+        **Windows**:
+        - 이미 기본 한글 폰트가 설치되어 있습니다.
         
-        # 나눔 폰트 우선 순위 설정
-        prioritized_fonts = [f for f in korean_fonts if 'nanum' in f.lower()]
-        prioritized_fonts += [f for f in korean_fonts if 'nanum' not in f.lower()]
-        
-        # 한글 지원 가능한 폰트 후보 목록 (우선순위 순서)
-        default_korean_fonts = [
-            'NanumGothicCoding', 'NanumGothic', 'Nanum Gothic', 'Nanum Gothic Coding',
-            'NanumBarunGothic', 'Nanum Barun Gothic', 'Malgun Gothic', 'Gulim', 'Batang',
-            'AppleGothic', 'Noto Sans KR', 'Noto Sans CJK KR', 'UnDotum', 'Dotum'
-        ]
-        
-        # 찾은 한글 폰트 + 기본 폰트 목록 결합
-        all_fonts = prioritized_fonts + [f for f in default_korean_fonts if f not in prioritized_fonts]
-        
-        # 적용 가능한 폰트 찾기
-        font_list = [f.name for f in fm.fontManager.ttflist]
-        
-        # 시스템에 설치된 한글 폰트 찾기
-        found_font = None
-        for font in all_fonts:
-            if any(font.lower() == f.lower() for f in font_list):
-                found_font = font
-                break
-            
-        # 정확한 이름 매칭이 안 되면 일부 매칭 시도
-        if not found_font:
-            for font in all_fonts:
-                matching_fonts = [f for f in font_list if font.lower() in f.lower()]
-                if matching_fonts:
-                    found_font = matching_fonts[0]
-                    break
-        
-        # 폰트 설정
-        if found_font:
-            plt.rc('font', family=found_font)
-            logger.info(f"한글 폰트 설정 완료: {found_font}")
-        else:
-            # 한글 폰트 못 찾았을 때 sans-serif 설정
-            plt.rc('font', family='sans-serif')
-            
-            # 경고 메시지는 로그에만 남기고 UI에는 표시하지 않음
-            logger.warning("한글 폰트를 찾을 수 없습니다.")
-            
-            # 가이드 표시 대신 웹 폰트로 대체 안내
-            show_korean_font_installation_guide()
-        
-        # 폰트 설정 확인
-        plt.rc('axes', unicode_minus=False)  # 마이너스 기호 깨짐 방지
-        
-    except Exception as e:
-        # 오류 발생 시 기본 폰트 설정 (오류 메시지는 로그에만 남김)
-        plt.rc('font', family='sans-serif')
-        logger.warning(f"폰트 설정 중 오류 발생: {str(e)}")
-
-# PyVis에 한글 폰트 적용 함수
-def apply_korean_font_to_pyvis(net):
-    """PyVis 네트워크에 기본 스타일을 적용합니다 (한글 지원 X)"""
-    try:
-        # 스타일 개선만 적용 (한글 폰트 설정 시도 없음)
-        net.html = net.html.replace("<head>", """<head>
-        <style>
-        body, html, .vis-network, .vis-label {
-            font-family: Arial, sans-serif !important;
-        }
-        .vis-network div.vis-network-tooltip {
-            background-color: rgba(255, 255, 255, 0.9) !important;
-            border: 1px solid #ccc !important;
-            border-radius: 4px !important;
-            padding: 8px !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-        }
-        </style>
+        설치 후 앱을 새로고침하세요.
         """)
-        
-        # 기본 옵션 설정 (영문 폰트만 사용)
-        try:
-            net.set_options("""
-            {
-                "nodes": {
-                    "font": {
-                        "face": "Arial, sans-serif",
-                        "size": 14
-                    }
-                },
-                "edges": {
-                    "font": {
-                        "face": "Arial, sans-serif",
-                        "size": 12
-                    }
-                }
-            }
-            """)
-        except:
-            pass  # 조용히 실패 처리
-            
-        return net
-    except Exception:
-        return net  # 오류 무시
 
-# 한글을 영문으로 변환하는 함수 (폰트 문제 대비)
+# 한글 폰트 설정 함수 - 항상 동작하도록 개선
+def set_korean_font():
+    """시스템에 설치된 한글 폰트 확인 및 설정"""
+    global HAS_KOREAN_FONT
+    
+    # Streamlit Cloud 환경인 경우
+    if is_streamlit_cloud():
+        # 클라우드 환경에서는 로마자 사용
+        HAS_KOREAN_FONT = False
+        
+        # 조용히 실패하기
+        try:
+            plt.rcParams['font.family'] = 'DejaVu Sans'
+        except:
+            pass
+            
+        return False
+        
+    # 이미 폰트를 확인한 경우
+    if HAS_KOREAN_FONT:
+        return True
+        
+    # 한글 폰트 목록 확인
+    korean_fonts = get_korean_fonts()
+    
+    # 한글 폰트가 있는 경우
+    if korean_fonts:
+        font_name = korean_fonts[0]
+        try:
+            plt.rcParams['font.family'] = font_name
+            HAS_KOREAN_FONT = True
+            return True
+        except:
+            pass
+    
+    # 대체 폰트 시도
+    for font in ['NanumGothic', 'Malgun Gothic', 'AppleGothic', 'Gulim', 'Arial Unicode MS']:
+        try:
+            plt.rcParams['font.family'] = font
+            HAS_KOREAN_FONT = True
+            return True
+        except:
+            pass
+    
+    # 시스템 기본 폰트 사용
+    try:
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['axes.unicode_minus'] = False
+    except:
+        pass
+    
+    # 폰트 안내 출력하지 않음 - 사용자 경험 향상을 위해
+    HAS_KOREAN_FONT = False
+    return False
+
+# PyVis 네트워크에 한글 폰트 적용 (폰트 없이도 작동하도록 개선)
+def apply_korean_font_to_pyvis(net):
+    """PyVis 네트워크에 한글 폰트 적용"""
+    # HTML 템플릿에 웹 폰트 추가 (구글 폰트 CDN 사용)
+    net.html = net.html.replace('<head>', '''<head>
+        <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic&display=swap" rel="stylesheet">
+    ''')
+    
+    # CSS에 폰트 설정 추가
+    net.html = net.html.replace('</style>', '''
+        body { font-family: 'Nanum Gothic', sans-serif; }
+        .node text { font-family: 'Nanum Gothic', sans-serif; }
+        div.tooltip { font-family: 'Nanum Gothic', sans-serif; }
+    </style>''')
+    
+    return net
+
+# 한글 로마자 변환 함수 - 성능 개선
+SURNAMES = {
+    '김': 'Kim', '이': 'Lee', '박': 'Park', '최': 'Choi', '정': 'Jung', 
+    '강': 'Kang', '조': 'Jo', '윤': 'Yoon', '장': 'Jang', '임': 'Lim', 
+    '한': 'Han', '오': 'Oh', '서': 'Seo', '신': 'Shin', '권': 'Kwon',
+    '황': 'Hwang', '안': 'An', '송': 'Song', '전': 'Jeon', '홍': 'Hong',
+    '유': 'Yoo', '고': 'Ko', '문': 'Moon', '양': 'Yang', '손': 'Son',
+    '배': 'Bae', '백': 'Baek', '방': 'Bang', '노': 'No', '남': 'Nam',
+    '류': 'Ryu', '심': 'Sim', '허': 'Heo', '원': 'Won', '전': 'Jeon',
+    '천': 'Chun', '추': 'Chu', '동': 'Dong', '곽': 'Kwak', '금': 'Keum',
+    '주': 'Joo', '선': 'Sun', '구': 'Koo', '민': 'Min', '성': 'Sung',
+    '탁': 'Tak', '설': 'Seol', '길': 'Gil', '온': 'On', '경': 'Kyung',
+    '연': 'Yeon', '울': 'Ul', '제': 'Je', '태': 'Tae', '빈': 'Bin',
+    '라': 'Ra', '사': 'Sa', '상': 'Sang', '소': 'So', '채': 'Chae',
+    '지': 'Ji', '진': 'Jin', '육': 'Yook', '필': 'Pil', '하': 'Ha',
+    '감': 'Kam'
+}
+
 def romanize_korean(text):
-    """한글 이름을 영문으로 변환. 매핑 테이블은 가장 일반적인 발음 변환 규칙 사용"""
-    # 한글 문자가 포함되지 않은 경우 원본 그대로 반환
-    if not any(ord('가') <= ord(char) <= ord('힣') for char in text):
-        return text
+    """한글 이름을 로마자로 변환"""
+    if not text:
+        return "Unknown"
         
-    # 공백으로 나누어진 경우(이름과 정보가 함께 있는 경우)
-    if ' ' in text:
-        parts = text.split(' ', 1)
-        name = parts[0]
-        info = ' ' + parts[1] if len(parts) > 1 else ''
-        return romanize_korean(name) + info
+    # 정수 또는 부동소수점 처리
+    if isinstance(text, (int, float)):
+        return str(text)
+    
+    # 이미 알파벳인 경우 그대로 반환
+    if re.match(r'^[A-Za-z0-9_]+$', str(text)):
+        return str(text)
+    
+    # 단일 문자인 경우 학생 번호로 처리
+    if len(str(text)) == 1 and re.match(r'[가-힣]', str(text)):
+        hash_val = hash(text) % 1000
+        return f"Student-{hash_val}"
+    
+    try:
+        # 성씨 추출 (첫 글자)
+        surname = text[0]
+        given_name = text[1:]
         
-    # 성씨 딕셔너리 - 한글 성씨를 로마자 표기로 변환 (대표적인 성씨만 포함)
-    surnames = {
-        '김': 'Kim', '이': 'Lee', '박': 'Park', '최': 'Choi', '정': 'Jung', 
-        '강': 'Kang', '조': 'Jo', '윤': 'Yoon', '장': 'Jang', '임': 'Lim',
-        '오': 'Oh', '한': 'Han', '신': 'Shin', '서': 'Seo', '권': 'Kwon',
-        '황': 'Hwang', '안': 'Ahn', '송': 'Song', '전': 'Jeon', '홍': 'Hong',
-        '유': 'Yoo', '고': 'Ko', '문': 'Moon', '양': 'Yang', '손': 'Son',
-        '배': 'Bae', '백': 'Baek', '허': 'Heo', '노': 'Noh', '심': 'Shim',
-        '하': 'Ha', '전': 'Jeon', '곽': 'Kwak', '성': 'Sung', '차': 'Cha',
-        '주': 'Joo', '우': 'Woo', '구': 'Koo', '나': 'Na', '민': 'Min',
-        '유': 'Yoo', '진': 'Jin', '지': 'Ji', '엄': 'Uhm', '편': 'Pyeon'
-    }
-    
-    # 이름이 1글자인 경우 (특수한 처리가 필요한 경우)
-    if len(text) == 1:
-        return f"Student-{hash(text) % 1000:03d}"
-    
-    # 2글자 이상인 이름 처리
-    surname = text[0]  # 성씨는 첫 글자로 가정
-    given_name = text[1:]  # 이름은 나머지 부분
-    
-    # 매핑 테이블에 있는 성씨면 변환, 없으면 첫 글자를 'S'로 표현
-    if surname in surnames:
-        romanized = f"{surnames[surname]} {given_name}"
-    else:
-        # 매핑되지 않은 성씨는 간단한 해시값으로 학생 ID 생성
-        romanized = f"Student-{hash(text) % 1000:03d}"
-    
-    return romanized
+        # 성씨 변환
+        if surname in SURNAMES:
+            romanized_surname = SURNAMES[surname]
+        else:
+            # 알 수 없는 성씨
+            hash_val = hash(text) % 1000
+            return f"Student-{hash_val}"
+        
+        # 이름은 그대로 유지 (이름 글자별 변환은 복잡함)
+        # 실제로는 각 글자별로 발음에 따라 변환해야 하지만, 여기서는 단순화
+        
+        return f"{romanized_surname} {given_name}"
+    except:
+        # 변환 실패 시
+        return f"Student-{hash(str(text)) % 1000}"
 
 class NetworkVisualizer:
     """네트워크 그래프 시각화 클래스"""
