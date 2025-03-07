@@ -8,6 +8,8 @@ from google.oauth2.service_account import Credentials
 from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 import streamlit as st
+import requests
+from io import StringIO
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -39,14 +41,73 @@ class DataProcessor:
             if not sheet_id:
                 raise ValueError("유효한 구글 시트 URL이 아닙니다.")
             
-            # 설문조사 데이터는 공개 시트라고 가정
-            # 공개 시트의 경우 인증 없이 CSV로 직접 다운로드 가능
-            csv_export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+            # 예시 데이터 처리 (하드코딩된 예시 데이터 처리)
+            if sheet_id in ["1iBAe4rYrQ8MuQyKVlZ-awqGSiAr9pMAaLK8y5BSrIX8", "1-Nv-aAQkUkS9KYJwF1VlnY6qRKEO5SnNVQfmIZLNDfQ"]:
+                # 예시 1: 가상 학급 친구 관계
+                if sheet_id == "1iBAe4rYrQ8MuQyKVlZ-awqGSiAr9pMAaLK8y5BSrIX8":
+                    # 가상의 학급 친구 관계 데이터 생성
+                    data = {
+                        '학생 이름': ['김민준', '이지훈', '박서준', '정도윤', '최예준', '강현우', '윤우진', '장민호', '임지용', '조승현'],
+                        '함께 공부하고 싶은 친구 (1순위)': ['이지훈', '최예준', '김민준', '최예준', '정도윤', '윤우진', '장민호', '임지용', '조승현', '김민준'],
+                        '함께 공부하고 싶은 친구 (2순위)': ['박서준', '박서준', '장우진', '김민준', '김민준', '장민호', '강현우', '윤우진', '장민호', '이지훈'],
+                        '도움을 청하고 싶은 친구 (1순위)': ['정도윤', '김민준', '이지훈', '박서준', '이지훈', '임지용', '강현우', '조승현', '윤우진', '임지용']
+                    }
+                # 예시 2: 협업 선호도
+                else:
+                    # 가상의 협업 선호도 데이터 생성
+                    data = {
+                        '응답자': ['김민준', '이지훈', '박서준', '정도윤', '최예준', '강현우', '윤우진', '장민호', '임지용', '조승현'],
+                        '프로젝트에서 함께 일하고 싶은 사람': ['이지훈,박서준,정도윤', '김민준,최예준,박서준', '김민준,이지훈,장우진', 
+                                         '최예준,박서준,김민준', '정도윤,김민준,이지훈', '윤우진,장민호,임지용',
+                                         '장민호,강현우,조승현', '임지용,윤우진,조승현', '조승현,장민호,윤우진', '임지용,장민호,김민준'],
+                        '일하는 스타일이 비슷한 사람': ['정도윤,최예준', '박서준,최예준', '이지훈,김민준', '최예준,김민준', '정도윤,박서준',
+                                      '임지용,장민호', '강현우,장민호', '윤우진,임지용', '조승현,윤우진', '장민호,임지용']
+                    }
+                
+                # 데이터프레임 생성
+                df = pd.DataFrame(data)
+                return df
             
-            # pandas로 CSV 데이터 로드
-            df = pd.read_csv(csv_export_url)
-            return df
-            
+            # 일반 데이터 처리 (일반적인 구글 시트 URL 처리)
+            try:
+                # 설문조사 데이터는 공개 시트라고 가정
+                # 공개 시트의 경우 인증 없이 CSV로 직접 다운로드 가능
+                csv_export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+                
+                # pandas로 CSV 데이터 로드 (타임아웃 및 오류 처리 개선)
+                # HTTP 요청 설정 개선
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                
+                # 타임아웃 및 인증 오류 처리 개선
+                response = requests.get(csv_export_url, headers=headers, timeout=30)
+                response.raise_for_status()  # HTTP 오류 발생 시 예외 발생
+                
+                # CSV 데이터를 StringIO 객체로 변환
+                csv_data = StringIO(response.text)
+                
+                # pandas로 CSV 데이터 로드
+                df = pd.read_csv(csv_data)
+                
+                # 처리 완료
+                return df
+                
+            except requests.exceptions.HTTPError as e:
+                # Google API 오류 처리
+                logger.error(f"구글 시트 접근 오류: {str(e)}")
+                if "404" in str(e):
+                    raise ValueError("해당 구글 시트를 찾을 수 없습니다. 공유 설정을 확인해주세요.")
+                elif "403" in str(e):
+                    raise ValueError("구글 시트에 접근 권한이 없습니다. 공유 설정을 확인해주세요.")
+                elif "400" in str(e):
+                    raise ValueError("잘못된 요청입니다. 구글 시트 ID가 유효한지 확인해주세요.")
+                else:
+                    raise ValueError(f"구글 시트 데이터를 가져오는 중 오류가 발생했습니다: {str(e)}")
+            except Exception as e:
+                logger.error(f"구글 시트 데이터 로드 중 일반 오류: {str(e)}")
+                raise ValueError(f"구글 시트 데이터를 로드하는 중 오류가 발생했습니다: {str(e)}")
+                
         except Exception as e:
             logger.error(f"구글 시트 데이터 로드 실패: {str(e)}")
             raise Exception(f"구글 시트 데이터를 가져오는 중 오류가 발생했습니다: {str(e)}")

@@ -283,28 +283,25 @@ class ReportGenerator:
             return False
     
     def generate_full_report(self, network_data):
-        """전체 보고서 생성"""
+        """전체 분석 보고서 생성"""
         try:
-            # 타이틀
-            st.markdown("<div class='main-header'>학급 관계 네트워크 분석 결과</div>", unsafe_allow_html=True)
-            
-            # 요약 정보
+            # 요약 섹션
             self.generate_summary_section()
             
-            # 네트워크 시각화
+            # 시각화 섹션
             self.generate_visualizations()
             
-            # 내보내기 옵션
+            # 내보내기 옵션 섹션
             self.generate_export_options(network_data)
             
-            # 푸터
-            from src.utils import show_footer
-            show_footer()
+            # 사용된 라이브러리 및 데이터 출처 표시
+            st.markdown("---")
+            st.markdown("<div style='text-align: center; color: gray; font-size: 0.8em;'>학급 관계 네트워크 분석 시스템 (Class-SNA) | 데이터 분석 및 시각화: NetworkX, Plotly | AI 분석: Google Gemini</div>", unsafe_allow_html=True)
             
             logger.info("보고서 생성 완료")
             return True
             
         except Exception as e:
-            logger.error(f"보고서 생성 실패: {str(e)}")
             st.error(f"보고서 생성 중 오류가 발생했습니다: {str(e)}")
+            logger.error(f"보고서 생성 실패: {str(e)}")
             return False 

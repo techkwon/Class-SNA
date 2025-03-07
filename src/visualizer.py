@@ -40,18 +40,35 @@ def set_korean_font():
     try:
         # Streamlit Cloud 환경 확인 - 전역 함수 사용
         if is_streamlit_cloud():
-            # 폰트 설정 없이 바로 리턴
-            return
+            # Nanum Gothic Coding 폰트 설정 시도
+            try:
+                import matplotlib.font_manager as fm
+                # Nanum Gothic Coding 폰트를 우선 시도
+                plt.rc('font', family='Nanum Gothic Coding')
+                return
+            except:
+                # 폰트 설정 실패 시 기본 폰트 사용
+                return
             
         # 운영체제별 폰트 설정 (로컬 환경)
         system = platform.system()
         if system == 'Darwin':  # macOS
-            plt.rc('font', family='AppleGothic')
+            # Nanum Gothic Coding 폰트를 먼저 시도하고, 실패 시 AppleGothic 사용
+            try:
+                plt.rc('font', family='Nanum Gothic Coding')
+            except:
+                plt.rc('font', family='AppleGothic')
         elif system == 'Windows':  # Windows
-            plt.rc('font', family='Malgun Gothic')
+            # Nanum Gothic Coding 폰트를 먼저 시도하고, 실패 시 Malgun Gothic 사용
+            try:
+                plt.rc('font', family='Nanum Gothic Coding')
+            except:
+                plt.rc('font', family='Malgun Gothic')
         else:  # Linux 등 (로컬에서만 설치 시도)
             # 로컬 리눅스인지 Streamlit Cloud인지 추가 확인
             if "STREAMLIT" in os.environ:
+                # Nanum Gothic Coding 폰트 설정 시도
+                plt.rc('font', family='Nanum Gothic Coding')
                 return
                 
             # 로컬 Linux 환경으로 판단
@@ -60,8 +77,8 @@ def set_korean_font():
                 # 사용 가능한 시스템 폰트 확인
                 font_list = [f.name for f in fm.fontManager.ttflist]
                 
-                # 한글 지원 가능한 폰트 후보
-                korean_fonts = ['NanumGothic', 'NanumBarunGothic', 'Noto Sans CJK KR', 
+                # 한글 지원 가능한 폰트 후보 (Nanum Gothic Coding을 맨 앞에 배치)
+                korean_fonts = ['Nanum Gothic Coding', 'NanumGothicCoding', 'NanumGothic', 'NanumBarunGothic', 'Noto Sans CJK KR', 
                                'Noto Sans KR', 'Malgun Gothic', 'AppleGothic', 
                                'Dotum', 'Batang', 'UnDotum', 'Gulim']
                 
@@ -197,8 +214,8 @@ class NetworkVisualizer:
             return romanize_korean(node_name)
         return node_name
     
-    def create_plotly_network(self, layout="fruchterman", width=800, height=600):
-        """Plotly를 사용한 인터랙티브 네트워크 그래프 생성"""
+    def create_plotly_network(self, layout="fruchterman", width=900, height=700):
+        """Plotly를 사용한 네트워크 그래프 생성"""
         try:
             # 노드 정보 준비
             node_x = []
@@ -207,15 +224,15 @@ class NetworkVisualizer:
             node_size = []  # 노드 크기
             node_color = []  # 노드 색상
             
-            # 그래프 레이아웃 계산
+            # 그래프 레이아웃 계산 - 파라미터 조정하여 노드 간격 최적화
             if layout == "spring":
-                pos = nx.spring_layout(self.graph)
+                pos = nx.spring_layout(self.graph, k=0.5, iterations=50)
             elif layout == "circular":
                 pos = nx.circular_layout(self.graph)
             elif layout == "kamada":
                 pos = nx.kamada_kawai_layout(self.graph)
             else:  # fruchterman
-                pos = nx.fruchterman_reingold_layout(self.graph)
+                pos = nx.fruchterman_reingold_layout(self.graph, k=0.3)
             
             # 노드 중심성 및 커뮤니티 값 가져오기
             in_degree = self.metrics.get('in_degree', {})
@@ -233,10 +250,14 @@ class NetworkVisualizer:
                 
                 # 노드 텍스트 (이름) 설정
                 display_name = self._get_display_label(node)
-                node_text.append(f"이름: {display_name}")
+                degree_in = in_degree.get(node, 0)
+                degree_out = self.metrics.get('out_degree', {}).get(node, 0)
+                betweenness = self.metrics.get('betweenness', {}).get(node, 0)
+                
+                node_text.append(f"이름: {display_name}<br>인기도: {degree_in}<br>친밀도: {degree_out}<br>중재자 역할: {betweenness:.3f}")
                 
                 # 노드 크기 설정: 연결 중심성(In)에 비례
-                size = in_degree.get(node, 0) * 10 + 10  # 기본 크기 10, 연결 중심성에 따라 증가
+                size = in_degree.get(node, 0) * 15 + 15  # 크기 증가하여 더 잘 보이게 함
                 node_size.append(size)
                 
                 # 노드 색상 설정: 커뮤니티에 따라
@@ -271,7 +292,7 @@ class NetworkVisualizer:
             # 에지 트레이스 생성
             edge_trace = go.Scatter(
                 x=edge_x, y=edge_y,
-                line=dict(width=1, color='#888'),
+                line=dict(width=1.5, color='#888'),
                 hoverinfo='none',
                 mode='lines',
                 showlegend=False
@@ -286,7 +307,7 @@ class NetworkVisualizer:
                 marker=dict(
                     color=node_color,
                     size=node_size,
-                    line=dict(width=1, color='#888')
+                    line=dict(width=1.5, color='#444')
                 ),
                 showlegend=False
             )
@@ -311,163 +332,156 @@ class NetworkVisualizer:
             st.error(f"네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
             return None
     
-    def create_pyvis_network(self, height="500px", width="100%"):
-        """PyVis를 사용한 인터랙티브 네트워크 그래프 생성 (HTML)"""
+    def create_pyvis_network(self, height="600px", width="100%"):
+        """PyVis를 사용한 인터랙티브 네트워크 생성"""
         try:
-            # PyVis 네트워크 객체 생성
-            net = Network(height=height, width=width, directed=True, notebook=False)
+            # PyVis Network 객체 생성
+            net = Network(height=height, width=width, notebook=False, directed=True, 
+                         cdn_resources='remote')
             
-            # 중심성 지표가 계산되어 있는지 확인
-            if not self.metrics:
-                self.analyzer.calculate_centrality()
+            # 배경색과 글자색 설정
+            net.bgcolor = "#ffffff"
+            net.font_color = "black"
             
-            # 커뮤니티 정보가 없으면 탐지
-            if not self.communities:
-                self.analyzer.detect_communities()
+            # 물리 레이아웃 설정 (더 잘 보이도록 파라미터 조정)
+            physics_options = {
+                "barnesHut": {
+                    "gravitationalConstant": -10000,
+                    "centralGravity": 0.4,
+                    "springLength": 180,
+                    "springConstant": 0.05,
+                    "damping": 0.09
+                },
+                "maxVelocity": 50,
+                "minVelocity": 0.75
+            }
             
-            # 커뮤니티별 색상 할당
-            community_colors = {}
-            color_palette = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf"]
-            unique_communities = set(self.communities.values())
-            
-            for i, comm_id in enumerate(unique_communities):
-                color_idx = i % len(color_palette)
-                community_colors[comm_id] = color_palette[color_idx]
-            
-            # 한글 폰트 문제 확인 및 대응
-            use_romanized = not self.has_korean_font
-            
-            if use_romanized:
-                st.info("한글 폰트 문제로 인해 PyVis 네트워크에서 학생 이름이 영문으로 표시됩니다.")
-            
-            # 노드 추가
-            for node in self.graph.nodes():
-                # 노드 크기 계산 (in_degree 기준)
-                size = (self.metrics["in_degree"][node] * 30) + 15
-                
-                # 커뮤니티 색상
-                comm_id = self.communities.get(node, 0)
-                color = community_colors.get(comm_id, '#CCCCCC')
-                
-                # 툴팁 텍스트
-                title = f"{node}\n"
-                title += f"연결 중심성(In): {self.metrics['in_degree'][node]:.3f}\n"
-                title += f"연결 중심성(Out): {self.metrics['out_degree'][node]:.3f}\n"
-                title += f"매개 중심성: {self.metrics['betweenness'][node]:.3f}\n"
-                title += f"커뮤니티: {comm_id}"
-                
-                # 한글 폰트 문제가 있는 경우 로마자 변환
-                if use_romanized:
-                    display_label = self._get_display_label(node, use_romanized=True)
-                else:
-                    display_label = node
-                
-                # 노드 추가
-                net.add_node(node, label=display_label, title=title, size=size, color=color)
-            
-            # 엣지 추가
-            for edge in self.graph.edges(data=True):
-                from_node, to_node, attr = edge
-                weight = attr.get('weight', 1)
-                
-                # 엣지 너비 계산
-                width = min(weight * 2, 10)  # 너비 상한선 10
-                
-                # 엣지 툴팁 텍스트
-                if use_romanized:
-                    from_label = self._get_display_label(from_node, use_romanized=True)
-                    to_label = self._get_display_label(to_node, use_romanized=True)
-                    title = f"{from_label} → {to_label}, 가중치: {weight}"
-                else:
-                    title = f"{from_node} → {to_node}, 가중치: {weight}"
-                
-                # 엣지 추가
-                net.add_edge(from_node, to_node, title=title, width=width)
-            
-            # 물리적 레이아웃 설정
+            # 노드와 엣지 인터랙션 설정
             net.set_options("""
-            var options = {
+            {
+                "nodes": {
+                    "font": {
+                        "size": 14,
+                        "face": "Arial"
+                    },
+                    "borderWidth": 2,
+                    "borderWidthSelected": 4,
+                    "scaling": {
+                        "min": 20,
+                        "max": 60
+                    }
+                },
+                "edges": {
+                    "arrows": {
+                        "to": {
+                            "enabled": true,
+                            "scaleFactor": 0.5
+                        }
+                    },
+                    "color": {
+                        "inherit": false,
+                        "color": "#999999",
+                        "highlight": "#FF0000",
+                        "hover": "#007bff"
+                    },
+                    "smooth": {
+                        "enabled": true,
+                        "type": "dynamic"
+                    },
+                    "width": 1.5,
+                    "hoverWidth": 2.5,
+                    "selectionWidth": 2.5
+                },
+                "interaction": {
+                    "hover": true,
+                    "navigationButtons": true,
+                    "multiselect": true,
+                    "keyboard": {
+                        "enabled": true
+                    }
+                },
                 "physics": {
+                    "enabled": true,
                     "barnesHut": {
                         "gravitationalConstant": -10000,
-                        "centralGravity": 0.3,
-                        "springLength": 150,
+                        "centralGravity": 0.4,
+                        "springLength": 180,
                         "springConstant": 0.05,
                         "damping": 0.09
                     },
                     "maxVelocity": 50,
-                    "minVelocity": 0.75,
-                    "solver": "barnesHut"
-                },
-                "interaction": {
-                    "hover": true,
-                    "navigationButtons": true
-                },
-                "edges": {
-                    "smooth": {
-                        "type": "continuous",
-                        "forceDirection": "none"
-                    }
-                },
-                "nodes": {
-                    "font": {
-                        "face": "arial",
-                        "size": 14
-                    }
+                    "minVelocity": 0.75
                 }
             }
             """)
             
-            # 맵핑 테이블 표시 (한글 폰트 문제가 있는 경우)
-            if use_romanized:
-                # 매핑 테이블 생성
-                node_names = list(self.graph.nodes())
-                romanized_names = [self._get_display_label(node, use_romanized=True) for node in node_names]
-                
-                # 매핑 테이블 표시
-                with st.expander("학생 이름 매핑 테이블 (PyVis)", expanded=False):
-                    mapping_df = pd.DataFrame({
-                        "영문 표시": romanized_names,
-                        "원래 이름": node_names
-                    })
-                    st.dataframe(mapping_df)
+            # 중심성 지표 가져오기
+            in_degree = self.metrics.get('in_degree', {})
+            out_degree = self.metrics.get('out_degree', {})
+            betweenness = self.metrics.get('betweenness', {})
             
-            # 임시 HTML 파일 생성
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.html') as tmpfile:
-                net.save_graph(tmpfile.name)
+            # 커뮤니티 정보 가져오기
+            communities = self.communities
+            
+            # 색상 팔레트
+            color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+                             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+            
+            # 노드 추가
+            for node in self.graph.nodes:
+                # 노드 크기 계산
+                size = in_degree.get(node, 0) * 15 + 20  # 크기 증가
                 
-                # HTML 파일을 읽어 데이터 URI로 변환
-                with open(tmpfile.name, 'r', encoding='utf-8') as f:
-                    html_content = f.read()
+                # 커뮤니티 기반 색상 할당
+                comm_id = communities.get(node, 0)
+                color = color_palette[comm_id % len(color_palette)]
                 
-                # 워크어라운드: streamlit.components.v1이 없을 경우, iframe을 사용하여 표시
-                try:
-                    # streamlit.components.v1이 있으면 사용
-                    import streamlit.components.v1 as components
-                    return tmpfile.name
-                except (ImportError, AttributeError):
-                    # 없으면 임시 방편으로 iframe으로 처리
-                    logger.warning("streamlit.components.v1 모듈을 가져올 수 없습니다. 대체 방법을 사용합니다.")
-                    
-                    # HTML 내용을 base64로 인코딩
-                    encoded_html = base64.b64encode(html_content.encode()).decode()
-                    
-                    # iframe 방식으로 데이터 URI 생성
-                    st.markdown(f"### 인터랙티브 네트워크 그래프")
-                    st.warning("시각화 컴포넌트가 제한된 환경에서 실행 중입니다. HTML 다운로드 기능을 이용해 네트워크 그래프를 확인하세요.")
-                    
-                    # 다운로드 링크 제공
-                    st.markdown(f'<a href="data:text/html;base64,{encoded_html}" download="network_graph.html">인터랙티브 네트워크 HTML 다운로드</a>', unsafe_allow_html=True)
-                    
-                    return tmpfile.name
+                # 표시할 이름(라벨) 설정
+                display_label = self._get_display_label(node)
+                
+                # 툴팁(hover) 텍스트 설정 - 더 상세한 정보
+                title = f"<div style='font-size:14px; font-weight:bold;'>{node}</div>"
+                title += f"<hr style='margin:2px'>"
+                title += f"<div><b>인기도(In)</b>: {in_degree.get(node, 0)}</div>"
+                title += f"<div><b>친밀도(Out)</b>: {out_degree.get(node, 0)}</div>"
+                title += f"<div><b>중재자 역할</b>: {betweenness.get(node, 0):.3f}</div>"
+                title += f"<div><b>그룹번호</b>: {comm_id}</div>"
+                
+                # 노드 추가
+                net.add_node(
+                    node,
+                    label=display_label,
+                    title=title,
+                    size=size,
+                    color=color,
+                    borderWidth=2,
+                    borderWidthSelected=4,
+                    font={'color': 'black', 'size': 14}
+                )
+            
+            # 엣지 추가
+            for source, target, data in self.graph.edges(data=True):
+                weight = data.get('weight', 1)
+                edge_type = data.get('type', 'relationship')
+                
+                # 엣지 색상 설정 - 기본은 회색, 선택 시 빨간색, 호버 시 파란색
+                net.add_edge(
+                    source, target,
+                    width=weight * 1.5,  # 굵기 증가
+                    title=f"{source} → {target} ({edge_type})",
+                    arrowStrikethrough=True,
+                    color={'color': '#999999', 'highlight': '#FF0000', 'hover': '#007bff'}
+                )
+            
+            # 임시 파일로 저장
+            temp_dir = tempfile.gettempdir()
+            html_path = os.path.join(temp_dir, "network.html")
+            net.save_graph(html_path)
+            
+            return html_path
             
         except Exception as e:
-            logger.error(f"PyVis 네트워크 그래프 생성 실패: {str(e)}")
-            st.error(f"인터랙티브 네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
-            
-            # 오류 발생 시 간단한 안내 메시지
-            st.warning("인터랙티브 네트워크 그래프를 생성할 수 없습니다. 대신 Plotly 그래프를 사용해주세요.")
-            
+            st.error(f"인터랙티브 네트워크 생성 중 오류가 발생했습니다: {str(e)}")
             return None
     
     def create_centrality_plot(self, metric="in_degree", top_n=10):
