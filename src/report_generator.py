@@ -170,7 +170,33 @@ class ReportGenerator:
                         import streamlit.components.v1 as components
                         components.html(html_data, height=500)
                     except Exception as e:
-                        st.error(f"인터랙티브 네트워크 표시 중 오류 발생: {str(e)}")
+                        # 오류 메시지에서 "File name too long" 오류를 특별 처리
+                        error_str = str(e)
+                        if "File name too long" in error_str:
+                            # 다른 방식으로 HTML 표시 시도 (iframe 사용)
+                            try:
+                                from IPython.display import HTML
+                                # HTML을 문자열 단축 처리
+                                html_short = html_data
+                                if len(html_short) > 1000000:  # 1MB 이상이면 요약
+                                    html_short = html_short[:500000] + "<!-- 내용 생략 -->" + html_short[-500000:]
+                                # HTML base64 인코딩 후 데이터 URL로 표시
+                                import base64
+                                html_bytes = html_short.encode('utf-8')
+                                encoded = base64.b64encode(html_bytes).decode()
+                                data_url = f"data:text/html;base64,{encoded}"
+                                st.markdown(f'<iframe src="{data_url}" width="100%" height="500px"></iframe>', unsafe_allow_html=True)
+                                
+                                # 다운로드 링크도 제공
+                                html_download = html_data.encode("utf-8")
+                                b64 = base64.b64encode(html_download).decode()
+                                href = f'<a href="data:text/html;base64,{b64}" download="network_graph.html">📥 네트워크 그래프 다운로드</a>'
+                                st.markdown(href, unsafe_allow_html=True)
+                            except Exception as iframe_e:
+                                st.error(f"대체 표시 방법도 실패했습니다: {str(iframe_e)}")
+                                st.info("그래프를 표시할 수 없습니다. 다른 탭의 정적 그래프를 참고하세요.")
+                        else:
+                            st.error(f"인터랙티브 네트워크 표시 중 오류 발생: {error_str}")
                 else:
                     st.warning("인터랙티브 네트워크 생성에 실패했습니다.")
             

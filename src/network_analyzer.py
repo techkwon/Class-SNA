@@ -276,4 +276,28 @@ class NetworkAnalyzer:
         if not self.metrics:
             self.calculate_centrality()
             
-        return self.metrics 
+        return self.metrics
+        
+    def find_isolated_nodes(self, threshold=0):
+        """고립된 노드 식별 (in_degree가 threshold 이하인 노드)
+        
+        Args:
+            threshold (int): 이 값 이하의 in_degree를 가진 노드를 고립된 것으로 판단 (기본값: 0)
+            
+        Returns:
+            list: 고립된 노드 목록
+        """
+        try:
+            # 중심성 지표가 없다면 계산
+            if not self.metrics:
+                self.calculate_centrality()
+                
+            # in_degree가 threshold 이하인 노드 식별
+            in_degree = self.metrics.get('in_degree', {})
+            isolated_nodes = [node for node, value in in_degree.items() if value <= threshold]
+            
+            return isolated_nodes
+            
+        except Exception as e:
+            logger.error(f"고립 노드 식별 중 오류 발생: {str(e)}")
+            return [] 

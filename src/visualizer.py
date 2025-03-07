@@ -432,10 +432,10 @@ class NetworkVisualizer:
     
     def create_pyvis_network(self, height="600px", width="100%"):
         """PyVis를 사용하여 인터랙티브 네트워크 시각화를 생성합니다 (영문 이름 표시)"""
-        # 네트워크 초기화
+        # 네트워크 초기화 (물리적 레이아웃 개선)
         net = Network(height=height, width=width, directed=True, notebook=False)
         net.toggle_hide_edges_on_drag(True)
-        net.barnes_hut(gravity=-10000, central_gravity=0.3, spring_length=250)
+        net.barnes_hut(gravity=-10000, central_gravity=0.4, spring_length=300, spring_strength=0.08, damping=0.15)
         
         # 노드와 엣지 데이터 가져오기
         nodes = self.analyzer.get_nodes()
@@ -464,10 +464,20 @@ class NetworkVisualizer:
                 for original in sorted(name_mapping.values()):
                     st.write(romanize_korean(original))
         
-        # 컬러 매핑 설정
+        # 컬러 매핑 설정 (더 선명한 색상으로 변경)
         colors = self.analyzer.get_community_colors()
         
-        # 중심성 계산
+        # 더 선명한 색상 팔레트로 업데이트
+        vibrant_colors = {
+            0: "#4285F4",  # 구글 블루
+            1: "#EA4335",  # 구글 레드
+            2: "#34A853",  # 구글 그린
+            3: "#FBBC05",  # 구글 옐로우
+            4: "#8E24AA",  # 퍼플
+            5: "#16A085"   # 터콰이즈
+        }
+        
+        # 중심성 계산 (노드 크기 조정에 사용)
         centrality = self.analyzer.get_centrality_metrics()
         
         # 커뮤니티 정보 가져오기
@@ -478,16 +488,10 @@ class NetworkVisualizer:
             # 항상 로마자 이름으로 표시
             romanized_name = romanize_korean(node_name)
             
-            # 크기 설정 (정규화된 중심성 기반)
-            size = 25 + centrality['in_degree'][node_name] * 50
-            if size > 50:
-                size = 50
-            
-            # 커뮤니티 색상 가져오기
-            if node_name in colors:
-                color = colors[node_name]
-            else:
-                color = "#97c2fc"  # 기본 파란색
+            # 크기 설정 (정규화된 중심성 기반으로 더 명확한 차이 부여)
+            size = 25 + centrality['in_degree'][node_name] * 75
+            if size > 65:
+                size = 65
             
             # 커뮤니티 정보 가져오기
             community_id = None
@@ -496,15 +500,27 @@ class NetworkVisualizer:
                     community_id = comm_id
                     break
             
+            # 선명한 색상 적용
+            if community_id is not None and community_id in vibrant_colors:
+                color = vibrant_colors[community_id]
+            else:
+                color = "#607D8B"  # 기본 색상
+            
             # 툴팁 정보 구성 (한글로 표시, 내부는 영문 사용)
             tooltip = f"이름: {node_name}\n"  # <br> 대신 \n 사용
             tooltip += f"그룹: {community_id}\n"
             tooltip += f"인기도(In): {self.analyzer.graph.in_degree(node_name)}\n"
             tooltip += f"친밀도(Out): {self.analyzer.graph.out_degree(node_name)}"
             
-            # 노드 추가 (로마자 이름으로 내부 처리)
-            net.add_node(romanized_name, label=romanized_name, title=tooltip, 
-                        size=size, color=color)
+            # 노드 추가 (로마자 이름으로 내부 처리) - 그림자 및 테두리 효과 추가
+            net.add_node(romanized_name, 
+                         label=romanized_name, 
+                         title=tooltip, 
+                         size=size, 
+                         color=color,
+                         borderWidth=2,
+                         borderWidthSelected=4,
+                         shadow=True)
         
         # 엣지 추가 (원래 이름이 로마자 이름으로 변경된 것 반영)
         for source, target, weight in edges:
@@ -514,8 +530,18 @@ class NetworkVisualizer:
             # 툴팁 한글로 표시
             edge_tooltip = f"관계: {source} → {target}\n강도: {weight}"  # <br> 대신 \n 사용
             
-            net.add_edge(romanized_source, romanized_target, value=weight, 
-                         title=edge_tooltip)
+            # 엣지 굵기를 가중치에 따라 조정하여 더 명확하게 표시
+            edge_width = 1 + weight * 2
+            
+            net.add_edge(romanized_source, romanized_target, 
+                         value=weight, 
+                         title=edge_tooltip,
+                         width=edge_width,
+                         arrowStrikethrough=True,
+                         smooth={
+                             'type': 'curvedCW',
+                             'roundness': 0.2
+                         })
         
         # 폰트 및 스타일 적용
         net = apply_korean_font_to_pyvis(net)
@@ -533,12 +559,72 @@ class NetworkVisualizer:
                 if (typeof network !== 'undefined') {
                     clearInterval(checkExist);
                     
+                    // 네트워크 옵션 개선 (시각성 및 사용성 향상)
+                    network.setOptions({
+                        nodes: {
+                            font: {
+                                size: 16,
+                                strokeWidth: 4,
+                                strokeColor: 'rgba(255, 255, 255, 0.8)'
+                            },
+                            scaling: {
+                                label: true
+                            },
+                            shadow: {
+                                enabled: true,
+                                color: 'rgba(0,0,0,0.3)',
+                                size: 10,
+                                x: 5,
+                                y: 5
+                            }
+                        },
+                        edges: {
+                            color: {
+                                inherit: false,
+                                color: '#999999',
+                                highlight: '#FF3333',
+                                hover: '#3388FF'
+                            },
+                            selectionWidth: 3,
+                            hoverWidth: 2,
+                            arrows: {
+                                to: {
+                                    enabled: true,
+                                    scaleFactor: 0.7,
+                                    type: "arrow"
+                                }
+                            },
+                            smooth: true
+                        },
+                        interaction: {
+                            hover: true,
+                            tooltipDelay: 100,
+                            zoomView: true,
+                            dragView: true,
+                            navigationButtons: true,
+                            keyboard: true
+                        },
+                        physics: {
+                            stabilization: {
+                                enabled: true,
+                                iterations: 1000,
+                                updateInterval: 50
+                            }
+                        }
+                    });
+                    
                     // 클릭 이벤트 리스너 추가
                     network.on("click", function(params) {
                         if (params.nodes.length > 0) {
                             var nodeId = params.nodes[0];
                             if (nodeId) {
                                 try {
+                                    // 선택한 노드 강조 표시
+                                    var selectedNode = nodes.get(nodeId);
+                                    selectedNode.borderWidth = 4;
+                                    selectedNode.size = selectedNode.size * 1.2;
+                                    nodes.update(selectedNode);
+                                    
                                     // Streamlit과 통신
                                     window.parent.postMessage({
                                         type: 'streamlit:setComponentValue',
@@ -568,10 +654,20 @@ class NetworkVisualizer:
                                 allNodes[i].color = nodeColors[i];
                                 allNodes[i].borderWidth = 3;
                                 allNodes[i].shadow = true;
+                                allNodes[i].font = {
+                                    color: '#000000',
+                                    size: 18,
+                                    strokeWidth: 4,
+                                    strokeColor: 'rgba(255, 255, 255, 0.8)'
+                                };
                             } else {
-                                allNodes[i].color = 'rgba(200,200,200,0.3)';
+                                allNodes[i].color = 'rgba(200,200,200,0.2)';
                                 allNodes[i].borderWidth = 1;
                                 allNodes[i].shadow = false;
+                                allNodes[i].font = {
+                                    color: '#888888',
+                                    size: 14
+                                };
                             }
                             updateArray.push(allNodes[i]);
                         }
@@ -583,10 +679,12 @@ class NetworkVisualizer:
                             var edge = allEdges[i];
                             if (edge.from === nodeId || edge.to === nodeId) {
                                 edge.color = 'rgba(50, 50, 200, 1)';
-                                edge.width = 2;
+                                edge.width = 3;
+                                edge.shadow = true;
                             } else {
-                                edge.color = 'rgba(200,200,200,0.3)';
+                                edge.color = 'rgba(200,200,200,0.2)';
                                 edge.width = 1;
+                                edge.shadow = false;
                             }
                             updateEdges.push(edge);
                         }
@@ -601,8 +699,14 @@ class NetworkVisualizer:
                         var updateArray = [];
                         for (var i in allNodes) {
                             allNodes[i].color = nodeColors[i];
-                            allNodes[i].borderWidth = 1;
-                            allNodes[i].shadow = false;
+                            allNodes[i].borderWidth = 2;
+                            allNodes[i].shadow = true;
+                            allNodes[i].font = {
+                                color: '#000000',
+                                size: 16,
+                                strokeWidth: 4,
+                                strokeColor: 'rgba(255, 255, 255, 0.8)'
+                            };
                             updateArray.push(allNodes[i]);
                         }
                         nodes.update(updateArray);
@@ -612,10 +716,23 @@ class NetworkVisualizer:
                         for (var i in allEdges) {
                             var edge = allEdges[i];
                             edge.color = 'rgba(100,100,100,0.8)';
-                            edge.width = 1;
+                            edge.width = edge.value ? 1 + edge.value * 2 : 1;
+                            edge.shadow = false;
                             updateEdges.push(edge);
                         }
                         edges.update(updateEdges);
+                    });
+                    
+                    // 레이아웃 안정화 후 살짝 확대하여 전체 그래프 보이게 함
+                    network.once('stabilizationIterationsDone', function() {
+                        setTimeout(function() {
+                            network.fit({
+                                animation: {
+                                    duration: 1000,
+                                    easingFunction: 'easeOutQuint'
+                                }
+                            });
+                        }, 500);
                     });
                 }
             }, 100);
@@ -628,23 +745,32 @@ class NetworkVisualizer:
         .vis-tooltip {
             position: absolute;
             visibility: hidden;
-            padding: 8px;
+            padding: 10px 12px;
             white-space: pre-wrap !important;
             font-family: Arial, sans-serif;
             font-size: 14px;
             color: black;
-            background-color: white;
-            border-radius: 3px;
-            border: 1px solid #808074;
-            box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 6px;
+            border: 1px solid #cccccc;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
             pointer-events: none;
-            z-index: 5;
+            z-index: 10;
+            max-width: 300px;
+            transition: all 0.2s ease;
         }
         
         /* 태그가 표시되지 않도록 스타일 설정 */
         .vis-tooltip br, .vis-network-tooltip br {
             display: block;
             margin-top: 5px;
+        }
+        
+        #mynetwork {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border-radius: 8px !important;
+            overflow: hidden;
+            border: 1px solid #e0e0e0 !important;
         }
         """)
         
