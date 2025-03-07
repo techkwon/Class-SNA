@@ -173,20 +173,104 @@ def set_korean_font():
 
 # PyVis 네트워크에 한글 폰트 적용 (폰트 없이도 작동하도록 개선)
 def apply_korean_font_to_pyvis(net):
-    """PyVis 네트워크에 한글 폰트 적용"""
-    # HTML 템플릿에 웹 폰트 추가 (구글 폰트 CDN 사용)
-    net.html = net.html.replace('<head>', '''<head>
-        <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic&display=swap" rel="stylesheet">
-    ''')
-    
-    # CSS에 폰트 설정 추가
-    net.html = net.html.replace('</style>', '''
-        body { font-family: 'Nanum Gothic', sans-serif; }
-        .node text { font-family: 'Nanum Gothic', sans-serif; }
-        div.tooltip { font-family: 'Nanum Gothic', sans-serif; }
-    </style>''')
-    
-    return net
+    """PyVis 네트워크에 한글 폰트 설정을 적용합니다"""
+    try:
+        # 한글 폰트를 지원하는 웹 폰트 추가 (Google Fonts CDN 사용)
+        font_css = """
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+        """
+        
+        # 툴팁 스타일 개선
+        tooltip_css = """
+        .vis-tooltip {
+            position: absolute;
+            visibility: hidden;
+            padding: 10px 12px;
+            white-space: pre-wrap !important;
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 14px;
+            color: black;
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 6px;
+            border: 1px solid #cccccc;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            pointer-events: none;
+            z-index: 10;
+            max-width: 300px;
+            transition: all 0.2s ease;
+        }
+        """
+        
+        # 노드 스타일 개선
+        node_css = """
+        .vis-node {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        """
+        
+        # HTML에 웹 폰트를 추가하는 코드 삽입
+        html = net.html
+        
+        # 폰트 및 CSS 스타일 추가
+        html = html.replace('<head>', f'<head>\n<style>{font_css}{tooltip_css}{node_css}</style>')
+        
+        # 툴팁 개선을 위한 JavaScript 추가
+        tooltip_js = """
+        <script>
+        // 툴팁 태그 처리 함수 정의
+        function formatTooltip(tooltip) {
+            if (tooltip) {
+                // \\n을 <br>로 변환하여 줄바꿈 처리
+                tooltip = tooltip.replace(/\\n/g, "<br>");
+            }
+            return tooltip;
+        }
+        
+        // 문서가 로드되면 실행
+        document.addEventListener('DOMContentLoaded', function() {
+            // vis-network 요소가 초기화될 때까지 기다림
+            var checkExist = setInterval(function() {
+                if (document.querySelector('.vis-network') && window.network) {
+                    clearInterval(checkExist);
+                    
+                    // 툴팁 표시 방식 개선
+                    network.on("hoverNode", function(params) {
+                        var nodeId = params.node;
+                        var node = network.body.nodes[nodeId];
+                        if (node && node.options && node.options.title) {
+                            var tooltip = formatTooltip(node.options.title);
+                            var tooltipDiv = document.querySelector('.vis-tooltip');
+                            
+                            if (tooltipDiv) {
+                                tooltipDiv.innerHTML = tooltip;
+                                tooltipDiv.style.visibility = 'visible';
+                            }
+                        }
+                    });
+                    
+                    // 마우스가 노드에서 벗어날 때 툴팁 숨기기
+                    network.on("blurNode", function() {
+                        var tooltipDiv = document.querySelector('.vis-tooltip');
+                        if (tooltipDiv) {
+                            tooltipDiv.style.visibility = 'hidden';
+                        }
+                    });
+                }
+            }, 100);
+        });
+        </script>
+        """
+        
+        # JavaScript 코드 삽입
+        html = html.replace('</body>', f'{tooltip_js}</body>')
+        
+        # 수정된 HTML 반환
+        net.html = html
+        return net
+        
+    except Exception as e:
+        logger.error(f"PyVis 네트워크에 한글 폰트 적용 중 오류: {str(e)}")
+        return net
 
 # 한글 로마자 변환 함수 - 성능 개선
 SURNAMES = {
@@ -254,20 +338,9 @@ class NetworkVisualizer:
         self.graph = analyzer.graph
         
         # 한글 폰트 설정 및 확인
-        set_korean_font()
+        self.has_korean_font = False  # 기본값: 한글 폰트 없음, 로마자 사용
+        self._check_korean_font()
         
-        # 폰트 확인을 한 번만 실행하고 결과를 저장 (경고 메시지 중복 방지)
-        if 'has_korean_font' in st.session_state:
-            self.has_korean_font = st.session_state['has_korean_font']
-        else:
-            self.has_korean_font = self._check_korean_font()
-            st.session_state['has_korean_font'] = self.has_korean_font
-        
-        # Streamlit Cloud 환경에서는 자동으로 로마자화 사용 (경고 메시지 중복 방지)
-        if is_streamlit_cloud() and self.has_korean_font:
-            self.has_korean_font = False
-            st.session_state['has_korean_font'] = False
-            
         # 노드 이름 매핑 (원래 이름 -> 로마자화된 이름)
         self.name_mapping = {}
         if not self.has_korean_font:
@@ -278,14 +351,29 @@ class NetworkVisualizer:
         self.metrics = analyzer.metrics
     
     def _check_korean_font(self):
-        """한글 폰트 점검 - 항상 False 반환하여 로마자화 사용"""
-        # 항상 로마자 이름 사용하도록 False 반환
-        return False
+        """한글 폰트 사용 가능 여부 확인"""
+        # 전역 HAS_KOREAN_FONT 변수가 정의되어 있으면 사용
+        if 'HAS_KOREAN_FONT' in globals():
+            self.has_korean_font = globals()['HAS_KOREAN_FONT']
+        else:
+            # 기본값: 항상 로마자 사용 (한글 폰트 무시)
+            self.has_korean_font = False
+        
+        return self.has_korean_font
     
     def _get_display_label(self, node_name, use_romanized=True):
-        """노드 표시 라벨 반환 - 항상 로마자화된 이름 사용"""
-        # 항상 로마자화 사용
-        return romanize_korean(node_name)
+        """노드 레이블 표시용 이름 반환 (한글 폰트 문제 대응)"""
+        if not node_name:
+            return "Unknown"
+            
+        # 항상 로마자 변환 적용 (내부 처리용)
+        romanized = romanize_korean(str(node_name))
+        
+        # 사용자에게 표시할 때는 원본 또는 로마자 선택
+        if not use_romanized and hasattr(self, 'has_korean_font') and self.has_korean_font:
+            return str(node_name)  # 한글 폰트가 있으면 원본 이름 반환
+        else:
+            return romanized  # 그 외에는 로마자 이름 반환
     
     def create_plotly_network(self, layout="fruchterman", width=900, height=700):
         """Plotly를 사용한 네트워크 그래프 생성"""
@@ -471,379 +559,163 @@ class NetworkVisualizer:
             fig.update_layout(width=width, height=height)
             return fig
     
-    def create_pyvis_network(self, height="600px", width="100%"):
-        """PyVis를 사용하여 인터랙티브 네트워크 시각화를 생성합니다 (영문 이름 표시)"""
-        # 네트워크 초기화 (물리적 레이아웃 개선)
-        net = Network(height=height, width=width, directed=True, notebook=False)
-        net.toggle_hide_edges_on_drag(True)
-        net.barnes_hut(gravity=-10000, central_gravity=0.4, spring_length=300, spring_strength=0.08, damping=0.15)
-        
-        # 노드와 엣지 데이터 가져오기
-        nodes = self.analyzer.get_nodes()
-        edges = self.analyzer.get_edges()
-        
-        # 스트림릿에 안내 메시지 표시 (한글)
-        st.info("⚠️ 상호작용 네트워크에서는 한글 표시 문제를 방지하기 위해 영문 이름으로 표시됩니다.")
-        
-        # 이름 매핑 생성 (원본 → 로마자화)
-        name_mapping = {}
-        for node_name in nodes:
-            romanized = romanize_korean(node_name)
-            name_mapping[romanized] = node_name
-        
-        # 매핑 테이블 생성 (펼침/접기 가능한 섹션으로) - 한글
-        with st.expander("👁️ 한글 이름과 영문 표기 대응표 보기"):
-            col1, col2 = st.columns(2)
+    def create_pyvis_network(self, height="600px", width="100%", layout="fruchterman"):
+        """PyVis 라이브러리를 사용한 대화형 네트워크 생성"""
+        try:
+            # 그래프 존재 확인
+            if not hasattr(self, 'analyzer') or not self.analyzer or not hasattr(self.analyzer, 'graph'):
+                return "<div>데이터가 없습니다</div>"
+                
+            G = self.analyzer.graph
             
-            with col1:
-                st.markdown("**원본 이름**")
-                for original in sorted(name_mapping.values()):
-                    st.write(original)
+            if G is None or G.number_of_nodes() == 0:
+                return "<div>네트워크 데이터가 없습니다</div>"
+                
+            # PyVis 네트워크 객체 생성 - 물리 시뮬레이션 활성화
+            net = Network(
+                height=height, 
+                width=width,
+                directed=True,
+                bgcolor="#ffffff",  # 배경색: 흰색
+                font_color="#333333"  # 글자색: 어두운 회색
+            )
             
-            with col2:
-                st.markdown("**영문 표기**")
-                for original in sorted(name_mapping.values()):
-                    st.write(romanize_korean(original))
-        
-        # 컬러 매핑 설정 (더 선명한 색상으로 변경)
-        colors = self.analyzer.get_community_colors()
-        
-        # 더 선명한 색상 팔레트로 업데이트
-        vibrant_colors = {
-            0: "#4285F4",  # 구글 블루
-            1: "#EA4335",  # 구글 레드
-            2: "#34A853",  # 구글 그린
-            3: "#FBBC05",  # 구글 옐로우
-            4: "#8E24AA",  # 퍼플
-            5: "#16A085"   # 터콰이즈
-        }
-        
-        # 중심성 계산 (노드 크기 조정에 사용)
-        centrality = self.analyzer.get_centrality_metrics()
-        
-        # 커뮤니티 정보 가져오기
-        communities = self.analyzer.get_communities()
-        
-        # 노드 정보 설정
-        for i, node_name in enumerate(nodes):
-            # 항상 로마자 이름으로 표시
-            romanized_name = romanize_korean(node_name)
+            # 물리 시뮬레이션 설정 (노드 간 거리와 반발력 조정)
+            net.barnes_hut(
+                gravity=-10000,  # 중력(작을수록 노드가 더 멀리 떨어짐)
+                central_gravity=0.8,  # 중앙 중력
+                spring_length=200,  # 스프링 길이
+                spring_strength=0.05,  # 스프링 강도(작을수록 노드가 멀리 떨어짐)
+                damping=0.9  # 감쇠(클수록 안정화가 빠름)
+            )
             
-            # 크기 설정 (정규화된 중심성 기반으로 더 명확한 차이 부여)
-            size = 25 + centrality['in_degree'][node_name] * 75
-            if size > 65:
-                size = 65
-            
-            # 커뮤니티 정보 가져오기
-            community_id = None
-            for comm_id, members in communities.items():
-                if node_name in members:
-                    community_id = comm_id
-                    break
-            
-            # 선명한 색상 적용
-            if community_id is not None and community_id in vibrant_colors:
-                color = vibrant_colors[community_id]
-            else:
-                color = "#607D8B"  # 기본 색상
-            
-            # 툴팁 정보 구성 (한글로 표시, 내부는 영문 사용)
-            tooltip = f"이름: {node_name}\n"  # <br> 대신 \n 사용
-            tooltip += f"그룹: {community_id}\n"
-            tooltip += f"인기도(In): {self.analyzer.graph.in_degree(node_name)}\n"
-            tooltip += f"친밀도(Out): {self.analyzer.graph.out_degree(node_name)}"
-            
-            # 노드 추가 (로마자 이름으로 내부 처리) - 그림자 및 테두리 효과 추가
-            net.add_node(romanized_name, 
-                         label=romanized_name, 
-                         title=tooltip, 
-                         size=size, 
-                         color=color,
-                         borderWidth=2,
-                         borderWidthSelected=4,
-                         shadow=True)
-        
-        # 엣지 추가 (원래 이름이 로마자 이름으로 변경된 것 반영)
-        for source, target, weight in edges:
-            romanized_source = romanize_korean(source)
-            romanized_target = romanize_korean(target)
-            
-            # 툴팁 한글로 표시
-            edge_tooltip = f"관계: {source} → {target}\n강도: {weight}"  # <br> 대신 \n 사용
-            
-            # 엣지 굵기를 가중치에 따라 조정하여 더 명확하게 표시
-            edge_width = 1 + weight * 2
-            
-            net.add_edge(romanized_source, romanized_target, 
-                         value=weight, 
-                         title=edge_tooltip,
-                         width=edge_width,
-                         arrowStrikethrough=True,
-                         smooth={
-                             'type': 'curvedCW',
-                             'roundness': 0.2
-                         })
-        
-        # 폰트 및 스타일 적용
-        net = apply_korean_font_to_pyvis(net)
-        
-        # HTML 직접 반환 (파일에 저장하지 않음)
-        html = net.generate_html()
-        
-        # 노드 클릭 이벤트 처리를 위한 JavaScript 추가
-        html = html.replace("</body>", """
-        <script>
-        // 네트워크 모듈이 로드된 후 실행
-        document.addEventListener('DOMContentLoaded', function() {
-            // 네트워크 객체가 초기화될 때까지 기다림
-            var checkExist = setInterval(function() {
-                if (typeof network !== 'undefined') {
-                    clearInterval(checkExist);
-                    
-                    // 네트워크 옵션 개선 (시각성 및 사용성 향상)
-                    network.setOptions({
-                        nodes: {
-                            font: {
-                                size: 16,
-                                strokeWidth: 4,
-                                strokeColor: 'rgba(255, 255, 255, 0.8)'
-                            },
-                            scaling: {
-                                label: true
-                            },
-                            shadow: {
-                                enabled: true,
-                                color: 'rgba(0,0,0,0.3)',
-                                size: 10,
-                                x: 5,
-                                y: 5
-                            }
-                        },
-                        edges: {
-                            color: {
-                                inherit: false,
-                                color: '#999999',
-                                highlight: '#FF3333',
-                                hover: '#3388FF'
-                            },
-                            selectionWidth: 3,
-                            hoverWidth: 2,
-                            arrows: {
-                                to: {
-                                    enabled: true,
-                                    scaleFactor: 0.7,
-                                    type: "arrow"
-                                }
-                            },
-                            smooth: true
-                        },
-                        interaction: {
-                            hover: true,
-                            tooltipDelay: 100,
-                            zoomView: true,
-                            dragView: true,
-                            navigationButtons: true,
-                            keyboard: true
-                        },
-                        physics: {
-                            stabilization: {
-                                enabled: true,
-                                iterations: 1000,
-                                updateInterval: 50
-                            }
-                        }
-                    });
-                    
-                    // 클릭 이벤트 리스너 추가
-                    network.on("click", function(params) {
-                        if (params.nodes.length > 0) {
-                            var nodeId = params.nodes[0];
-                            if (nodeId) {
-                                try {
-                                    // 선택한 노드 강조 표시
-                                    var selectedNode = nodes.get(nodeId);
-                                    selectedNode.borderWidth = 4;
-                                    selectedNode.size = selectedNode.size * 1.2;
-                                    nodes.update(selectedNode);
-                                    
-                                    // Streamlit과 통신
-                                    window.parent.postMessage({
-                                        type: 'streamlit:setComponentValue',
-                                        value: {action: 'node_click', node: nodeId}
-                                    }, '*');
-                                } catch (err) {
-                                    console.error("노드 클릭 처리 중 오류 발생:", err);
-                                }
-                            }
-                        }
-                    });
-                    
-                    // 마우스 오버 이벤트 처리 (노드 강조 효과)
-                    network.on("hoverNode", function(params) {
-                        network.canvas.body.container.style.cursor = 'pointer';
-                        
-                        // 현재 노드와 연결된 노드만 강조
-                        var nodeId = params.node;
-                        var connectedNodes = network.getConnectedNodes(nodeId);
-                        connectedNodes.push(nodeId); // 자신도 포함
-                        
-                        // 연결된 노드와 엣지만 표시
-                        var updateArray = [];
-                        for (var i in allNodes) {
-                            var isConnected = connectedNodes.indexOf(i) !== -1;
-                            if (isConnected) {
-                                allNodes[i].color = nodeColors[i];
-                                allNodes[i].borderWidth = 3;
-                                allNodes[i].shadow = true;
-                                allNodes[i].font = {
-                                    color: '#000000',
-                                    size: 18,
-                                    strokeWidth: 4,
-                                    strokeColor: 'rgba(255, 255, 255, 0.8)'
-                                };
-                            } else {
-                                allNodes[i].color = 'rgba(200,200,200,0.2)';
-                                allNodes[i].borderWidth = 1;
-                                allNodes[i].shadow = false;
-                                allNodes[i].font = {
-                                    color: '#888888',
-                                    size: 14
-                                };
-                            }
-                            updateArray.push(allNodes[i]);
-                        }
-                        nodes.update(updateArray);
-                        
-                        // 연결된 엣지 강조
-                        var updateEdges = [];
-                        for (var i in allEdges) {
-                            var edge = allEdges[i];
-                            if (edge.from === nodeId || edge.to === nodeId) {
-                                edge.color = 'rgba(50, 50, 200, 1)';
-                                edge.width = 3;
-                                edge.shadow = true;
-                            } else {
-                                edge.color = 'rgba(200,200,200,0.2)';
-                                edge.width = 1;
-                                edge.shadow = false;
-                            }
-                            updateEdges.push(edge);
-                        }
-                        edges.update(updateEdges);
-                    });
-                    
-                    // 마우스 오버 해제 이벤트 처리
-                    network.on("blurNode", function(params) {
-                        network.canvas.body.container.style.cursor = 'default';
-                        
-                        // 원래 상태로 복원
-                        var updateArray = [];
-                        for (var i in allNodes) {
-                            allNodes[i].color = nodeColors[i];
-                            allNodes[i].borderWidth = 2;
-                            allNodes[i].shadow = true;
-                            allNodes[i].font = {
-                                color: '#000000',
-                                size: 16,
-                                strokeWidth: 4,
-                                strokeColor: 'rgba(255, 255, 255, 0.8)'
-                            };
-                            updateArray.push(allNodes[i]);
-                        }
-                        nodes.update(updateArray);
-                        
-                        // 엣지도 원래 상태로 복원
-                        var updateEdges = [];
-                        for (var i in allEdges) {
-                            var edge = allEdges[i];
-                            edge.color = 'rgba(100,100,100,0.8)';
-                            edge.width = edge.value ? 1 + edge.value * 2 : 1;
-                            edge.shadow = false;
-                            updateEdges.push(edge);
-                        }
-                        edges.update(updateEdges);
-                    });
-                    
-                    // 레이아웃 안정화 후 살짝 확대하여 전체 그래프 보이게 함
-                    network.once('stabilizationIterationsDone', function() {
-                        setTimeout(function() {
-                            network.fit({
-                                animation: {
-                                    duration: 1000,
-                                    easingFunction: 'easeOutQuint'
-                                }
-                            });
-                        }, 500);
-                    });
+            # 타이틀 설정
+            net.set_options("""
+            {
+              "interaction": {
+                "hover": true,
+                "tooltipDelay": 50
+              },
+              "physics": {
+                "stabilization": {
+                  "iterations": 50,
+                  "updateInterval": 25
                 }
-            }, 100);
-        });
-        </script>
-        </body>""")
-        
-        # 커스텀 CSS 스타일 추가 (툴팁 스타일 개선)
-        html = html.replace("<style>", """<style>
-        .vis-tooltip {
-            position: absolute;
-            visibility: hidden;
-            padding: 10px 12px;
-            white-space: pre-wrap !important;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            color: black;
-            background-color: rgba(255, 255, 255, 0.95);
-            border-radius: 6px;
-            border: 1px solid #cccccc;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-            pointer-events: none;
-            z-index: 10;
-            max-width: 300px;
-            transition: all 0.2s ease;
-        }
-        
-        /* 태그가 표시되지 않도록 스타일 설정 */
-        .vis-tooltip br, .vis-network-tooltip br {
-            display: block;
-            margin-top: 5px;
-        }
-        
-        #mynetwork {
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            border-radius: 8px !important;
-            overflow: hidden;
-            border: 1px solid #e0e0e0 !important;
-        }
-        """)
-        
-        # 태그를 처리하기 위한 JavaScript 추가 (tooltip 문자열 치환)
-        html = html.replace('function drawGraph() {', '''function drawGraph() {
-            // 툴팁 태그 처리 함수 정의
-            function formatTooltip(tooltip) {
-                // <br> 태그를 줄바꿈으로 변환
-                if (tooltip) {
-                    // \\u003c 는 < 의 유니코드 이스케이프 시퀀스
-                    tooltip = tooltip.replace(/\\u003cbr\\u003e/g, "\\n");
-                    tooltip = tooltip.replace(/<br>/g, "\\n");
-                }
-                return tooltip;
+              }
+            }
+            """)
+            
+            # 커뮤니티 색상 설정 (각 그룹별 색상)
+            community_colors = {} 
+            
+            # 선명한 색상 팔레트 (색약자도 구분 가능하도록)
+            vibrant_colors = {
+                0: "#1f77b4",  # 파랑
+                1: "#ff7f0e",  # 주황
+                2: "#2ca02c",  # 초록
+                3: "#d62728",  # 빨강
+                4: "#9467bd",  # 보라
+                5: "#8c564b",  # 갈색
+                6: "#e377c2",  # 분홍
+                7: "#7f7f7f",  # 회색
+                8: "#bcbd22",  # 연노랑
+                9: "#17becf"   # 청록
             }
             
-            // 원래 vis.DataSet을 확장하여 툴팁 처리
-            var originalDataSet = vis.DataSet;
-            vis.DataSet = function(data, options) {
-                if (data) {
-                    // 노드 데이터 처리
-                    for (var i = 0; i < data.length; i++) {
-                        if (data[i].title) {
-                            data[i].title = formatTooltip(data[i].title);
-                        }
-                    }
-                }
-                return new originalDataSet(data, options);
-            };
-        ''')
-        
-        return html
+            # 커뮤니티 색상 설정
+            colors = self.analyzer.get_community_colors()
+            
+            # 노드 추가 (학생)
+            for node in G.nodes():
+                # 노드 속성
+                node_attr = G.nodes[node]
+                
+                # 노드 이름 설정 - 항상 로마자 변환 적용
+                node_name = self._get_display_label(node, use_romanized=True)
+                
+                # 원본 이름 (한글) - 툴팁에만 사용
+                original_name = str(node)
+                
+                # 노드 크기 (인기도에 따라)
+                if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
+                    size = 20 + self.metrics['in_degree'][node] * 30
+                    size = min(size, 75)  # 최대 크기 제한
+                else:
+                    size = 20
+                
+                # 커뮤니티 정보 (그룹)
+                communities = self.analyzer.get_communities()
+                community_id = None
+                for comm_id, members in communities.items():
+                    if node in members:
+                        community_id = comm_id
+                        break
+                
+                # 색상 결정
+                if community_id is not None and community_id in vibrant_colors:
+                    color = vibrant_colors[community_id]
+                else:
+                    color = "#7f7f7f"  # 기본 회색
+                
+                # 툴팁 생성
+                tooltip = f"이름: {original_name} ({node_name})\n"
+                
+                if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
+                    tooltip += f"인기도: {self.metrics['in_degree'][node]:.3f}\n"
+                
+                if 'betweenness' in self.metrics and node in self.metrics['betweenness']:
+                    tooltip += f"매개 중심성: {self.metrics['betweenness'][node]:.3f}\n"
+                
+                if community_id is not None:
+                    tooltip += f"그룹: {community_id}\n"
+                
+                # 노드 추가
+                net.add_node(
+                    node,  # 원본 노드 ID 사용 (내부 식별용)
+                    label=node_name,  # 로마자 이름 표시
+                    title=tooltip,  # 툴팁에 원본 이름 포함
+                    size=size,
+                    color=color
+                )
+            
+            # 엣지 추가 (관계)
+            for source, target in G.edges():
+                # 엣지 추가
+                net.add_edge(
+                    source,
+                    target,
+                    arrows="to",  # 화살표 방향
+                    width=1,  # 선 굵기
+                    color="#848484",  # 회색 선
+                    smooth={"enabled": True, "type": "dynamic"}  # 곡선형 엣지
+                )
+            
+            # 레이아웃 설정
+            if layout == "circular":
+                net.set_options('{"layout": {"improvedLayout": true, "hierarchical": {"enabled": false}}}')
+                # 원형 레이아웃 적용 (PyVis에서는 물리 엔진 끄고 직접 좌표 설정)
+                pos = nx.circular_layout(G)
+                for node_id, coords in pos.items():
+                    net.get_node(node_id)['x'] = int(coords[0] * 1000)
+                    net.get_node(node_id)['y'] = int(coords[1] * 1000)
+                    net.get_node(node_id)['physics'] = False
+            
+            elif layout == "kamada":
+                # 기본 레이아웃 사용하고 초기 위치 Kamada-Kawai로 설정
+                pos = nx.kamada_kawai_layout(G)
+                for node_id, coords in pos.items():
+                    net.get_node(node_id)['x'] = int(coords[0] * 1000)
+                    net.get_node(node_id)['y'] = int(coords[1] * 1000)
+            
+            # 한글 폰트 적용
+            net = apply_korean_font_to_pyvis(net)
+            
+            # 임시 HTML 파일 생성 (Streamlit에서 표시용)
+            return net.html
+            
+        except Exception as e:
+            logger.error(f"PyVis 네트워크 생성 중 오류: {str(e)}")
+            return f"<div>네트워크 시각화 생성 중 오류가 발생했습니다: {str(e)}</div>"
     
     def create_centrality_plot(self, metric="in_degree", top_n=10):
         """중심성 지표 시각화 (내부 처리는 영문, 표시는 한글)"""
