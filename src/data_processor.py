@@ -196,19 +196,19 @@ class DataProcessor:
             # Gemini API를 사용하여 데이터 구조 분석
             analysis_result = self.api_manager.analyze_survey_data(data_str, questions_str)
             
-            # API 응답 전체를 디버깅 목적으로 로깅
+            # API 응답 전체를 디버깅 목적으로 로깅 (UI에는 표시하지 않음)
             logger.info(f"Gemini API 응답: {analysis_result[:1000]}...")
             
-            # 디버그 정보를 UI에 표시
-            with st.expander("디버그: API 응답 (개발자용)", expanded=False):
-                st.text_area("원본 응답:", value=analysis_result, height=200)
+            # 디버그 정보를 UI에 표시하지 않음
+            # with st.expander("디버그: API 응답 (개발자용)", expanded=False):
+            #     st.text_area("원본 응답:", value=analysis_result, height=200)
             
             # JSON 문자열 추출 및 정제
             json_str = self.extract_json_from_text(analysis_result)
             
-            # 디버그 정보를 UI에 표시
-            with st.expander("디버그: 추출된 JSON (개발자용)", expanded=False):
-                st.text_area("정제된 JSON:", value=json_str, height=200)
+            # 디버그 정보를 UI에 표시하지 않음
+            # with st.expander("디버그: 추출된 JSON (개발자용)", expanded=False):
+            #     st.text_area("정제된 JSON:", value=json_str, height=200)
             
             # 결과 객체 변수 초기화
             result = {"relationships": [], "students": []}
@@ -227,11 +227,12 @@ class DataProcessor:
                     logger.warning("파싱된 JSON에 유효한 relationships 키가 없습니다. 직접 관계 추출을 시도합니다.")
             except json.JSONDecodeError as e:
                 logger.error(f"JSON 파싱 실패: {str(e)}")
-                st.warning(f"JSON 파싱에 실패했습니다. 대안적인 방법으로 데이터 추출을 시도합니다.")
+                st.info("데이터 구조를 자동으로 분석하고 있습니다. 잠시만 기다려주세요.")
             
             # 백업 로직: API 응답에서 직접 관계 추출
             if not result.get("relationships"):
-                st.info("API 응답에서 직접 관계 데이터를 추출하고 있습니다.")
+                # 사용자에게 진행 상황만 간략히 알림
+                st.info("관계 데이터를 추출하고 있습니다. 잠시만 기다려주세요.")
                 
                 # 정규식 패턴 - 다양한 형식 지원
                 patterns = [
@@ -307,11 +308,14 @@ class DataProcessor:
                 st.error("모든 방법을 시도했지만 관계 데이터를 추출할 수 없습니다.")
                 raise ValueError("관계 데이터를 추출할 수 없습니다. API 응답을 확인해주세요.")
             
-            # 디버그: 최종 결과 구조 표시
-            with st.expander("디버그: 최종 데이터 구조 (개발자용)", expanded=False):
-                st.write("관계 수:", len(result["relationships"]))
-                st.write("학생 수:", len(result["students"]))
-                st.json({"relationships_sample": result["relationships"][:5], "students_sample": result["students"][:5]})
+            # 디버그 정보 표시하지 않음
+            # with st.expander("디버그: 최종 데이터 구조 (개발자용)", expanded=False):
+            #     st.write("관계 수:", len(result["relationships"]))
+            #     st.write("학생 수:", len(result["students"]))
+            #     st.json({"relationships_sample": result["relationships"][:5], "students_sample": result["students"][:5]})
+            
+            # 대신 사용자에게 간략한 성공 메시지 표시
+            st.success(f"{len(result['students'])}명의 학생과 {len(result['relationships'])}개의 관계를 성공적으로 추출했습니다.")
             
             return result
             
@@ -320,10 +324,10 @@ class DataProcessor:
             # 사용자에게 이해하기 쉬운 오류 메시지 제공
             st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
             
-            # 디버그 정보 표시
-            if "original_api_response" in st.session_state:
-                with st.expander("디버그: 원본 API 응답", expanded=True):
-                    st.text_area("원본 응답:", value=st.session_state["original_api_response"], height=200)
+            # 디버그 정보 표시하지 않음
+            # if "original_api_response" in st.session_state:
+            #     with st.expander("디버그: 원본 API 응답", expanded=True):
+            #         st.text_area("원본 응답:", value=st.session_state["original_api_response"], height=200)
             
             raise Exception(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
     
@@ -333,10 +337,13 @@ class DataProcessor:
             # 관계 데이터 추출
             relationships = analysis_result.get("relationships", [])
             
-            # 관계 데이터 확인 및 디버그 출력
-            st.write("### 디버그: 관계 데이터 확인")
-            st.write("이 정보는 문제 해결을 위한 것입니다.")
-            st.json(relationships[:10] if len(relationships) > 10 else relationships)
+            # 관계 데이터 확인 - 디버그 출력 제거
+            # st.write("### 디버그: 관계 데이터 확인")
+            # st.write("이 정보는 문제 해결을 위한 것입니다.")
+            # st.json(relationships[:10] if len(relationships) > 10 else relationships)
+            
+            # 간략한 메시지로 대체
+            st.info("관계 데이터를 네트워크 형식으로 변환하고 있습니다.")
             
             # 데이터 형식 확인
             if not relationships:
@@ -403,8 +410,8 @@ class DataProcessor:
                     standardized_relationships.append(std_rel)
             
             # 표준화된 관계 데이터 디버그 출력
-            st.write("### 표준화된 관계 데이터")
-            st.json(standardized_relationships[:10] if len(standardized_relationships) > 10 else standardized_relationships)
+            # st.write("### 표준화된 관계 데이터")
+            # st.json(standardized_relationships[:10] if len(standardized_relationships) > 10 else standardized_relationships)
             
             if not standardized_relationships:
                 st.error("관계 데이터 변환 실패. 필수 필드('from', 'to')가 없습니다.")
@@ -433,8 +440,8 @@ class DataProcessor:
                 nodes = list(nodes_from_relationships)
             
             # 노드 목록 디버그 출력
-            st.write(f"### 추출된 노드 목록 ({len(nodes)}개)")
-            st.write(nodes[:20] if len(nodes) > 20 else nodes)
+            # st.write(f"### 추출된 노드 목록 ({len(nodes)}개)")
+            # st.write(nodes[:20] if len(nodes) > 20 else nodes)
             
             if not nodes:
                 st.error("노드 데이터가 비어 있습니다. 학생 목록을 추출할 수 없습니다.")

@@ -64,14 +64,20 @@ class ReportGenerator:
             with tab1:
                 # 네트워크 그래프 시각화
                 st.write("#### 학급 관계 네트워크 그래프")
-                st.write("노드(원)는 학생을 나타내며, 크기는 연결 중심성(In)에 비례합니다. 색상은 같은 커뮤니티(그룹)에 속한 학생들을 나타냅니다.")
+                st.write("""
+                **📊 그래프 해석 가이드:**
+                - **원(노드)** : 각 학생을 나타냅니다
+                - **원의 크기** : 인기도(다른 학생들에게 선택된 횟수)에 비례합니다
+                - **원의 색상** : 같은 색상은 같은 그룹(커뮤니티)에 속한 학생들입니다
+                - **연결선** : 학생 간의 관계를 나타냅니다
+                """)
                 
                 # 레이아웃 선택 옵션
                 layout_options = {
-                    "fruchterman": "Fruchterman-Reingold",
-                    "spring": "Spring",
-                    "circular": "Circular",
-                    "kamada": "Kamada-Kawai"
+                    "fruchterman": "균형적 배치",
+                    "spring": "자연스러운 연결",
+                    "circular": "원형 배치",
+                    "kamada": "최적 거리 배치"
                 }
                 
                 selected_layout = st.selectbox(
@@ -86,7 +92,14 @@ class ReportGenerator:
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # PyVis 네트워크 생성 (인터랙티브)
-                st.write("#### 인터랙티브 네트워크 (드래그하여 조작 가능)")
+                st.write("#### 인터랙티브 네트워크")
+                st.write("""
+                아래 그래프는 마우스로 조작할 수 있습니다:
+                - **드래그**: 학생(노드)을 끌어서 이동할 수 있습니다
+                - **확대/축소**: 마우스 휠로 확대하거나 축소할 수 있습니다
+                - **호버**: 마우스를 올리면 학생 정보가 표시됩니다
+                """)
+                
                 pyvis_path = self.visualizer.create_pyvis_network()
                 
                 if pyvis_path:
@@ -107,14 +120,20 @@ class ReportGenerator:
             with tab2:
                 # 중심성 지표 시각화
                 st.write("#### 중심성 지표 분석")
-                st.write("중심성 지표는 학생들의 관계망 내 위치와 역할을 수치화합니다.")
+                st.write("""
+                **📈 중심성 지표 의미:**
+                - **인기도(연결 중심성-In)**: 다른 학생들에게 선택된 횟수입니다. 높을수록 더 인기가 많습니다.
+                - **친밀도(연결 중심성-Out)**: 학생이 다른 학생들을 선택한 횟수입니다. 높을수록 더 적극적으로 관계를 맺습니다.
+                - **중재자 역할(매개 중심성)**: 서로 다른 그룹을 연결하는 다리 역할입니다. 높을수록 정보 전달자 역할을 합니다.
+                - **정보 접근성(근접 중심성)**: 다른 모든 학생들과의 근접도입니다. 높을수록 전체 네트워크에서 정보를 빠르게 얻을 수 있습니다.
+                """)
                 
                 # 지표 선택 옵션
                 metric_options = {
-                    "in_degree": "연결 중심성(In) - 선호도",
-                    "out_degree": "연결 중심성(Out) - 친밀도",
-                    "betweenness": "매개 중심성 - 중재자 역할",
-                    "closeness": "근접 중심성 - 정보 접근성"
+                    "in_degree": "인기도 (선택받은 횟수)",
+                    "out_degree": "친밀도 (선택한 횟수)",
+                    "betweenness": "중재자 역할",
+                    "closeness": "정보 접근성"
                 }
                 
                 selected_metric = st.selectbox(
@@ -136,31 +155,50 @@ class ReportGenerator:
                 for name, values in self.metrics.items():
                     metrics_df[metric_options.get(name, name)] = pd.Series(values)
                 
-                st.write("#### 중심성 지표 데이터")
+                st.write("#### 전체 중심성 지표 데이터")
                 st.dataframe(metrics_df)
             
             with tab3:
                 # 커뮤니티 분석
                 st.write("#### 하위 그룹(커뮤니티) 분석")
-                st.write("하위 그룹은 서로 밀접하게 연결된 학생들의 집단을 나타냅니다.")
+                st.write("""
+                **👨‍👩‍👧‍👦 하위 그룹 분석 가이드:**
+                - 하위 그룹은 서로 밀접하게 연결된 학생들의 집단입니다
+                - 같은 그룹에 속한 학생들은 서로 더 자주 교류하는 경향이 있습니다
+                - 그룹 간 연결이 적은 경우 학급 내 분리 현상이 있을 수 있습니다
+                - 특정 그룹이 지나치게 고립되어 있는지 확인해보세요
+                """)
                 
                 # 커뮤니티 테이블 생성
                 community_df = self.visualizer.create_community_table()
                 st.dataframe(community_df)
                 
-                # 소외 학생 식별
-                isolated_students = self.analyzer.identify_isolated_nodes()
+                # 소외 학생 분석
+                st.write("#### 소외 학생 분석")
+                st.write("""
+                **💡 소외 학생 분석 가이드:**
+                - 소외 학생은 다른 학생들과의 연결이 적거나 없는 학생을 의미합니다
+                - 인기도(In) 값이 0인 학생은 아무도 선택하지 않은 학생입니다
+                - 친밀도(Out) 값이 0인 학생은 아무도 선택하지 않은 학생입니다
+                - 소외 학생들에게 특별한 관심이 필요할 수 있습니다
+                """)
                 
-                if isolated_students:
-                    st.write("#### 관심이 필요한 학생")
-                    st.write("연결 중심성(In)이 낮은 학생들입니다. 학급 내에서 상대적으로 적은 선택을 받았습니다.")
-                    st.write(", ".join(isolated_students))
+                isolated_nodes = self.analyzer.find_isolated_nodes()
+                if isolated_nodes:
+                    isolated_df = pd.DataFrame({
+                        "학생": isolated_nodes,
+                        "인기도(In)": [self.metrics["in_degree"].get(node, 0) for node in isolated_nodes],
+                        "친밀도(Out)": [self.metrics["out_degree"].get(node, 0) for node in isolated_nodes],
+                        "소속 그룹": [self.communities.get(node, -1) for node in isolated_nodes]
+                    })
+                    st.dataframe(isolated_df)
+                else:
+                    st.success("소외된 학생이 없습니다. 모든 학생이 네트워크에 잘 연결되어 있습니다.")
             
             return True
             
         except Exception as e:
-            logger.error(f"시각화 섹션 생성 실패: {str(e)}")
-            st.error(f"시각화 생성 중 오류가 발생했습니다: {str(e)}")
+            st.error(f"시각화 섹션 생성 중 오류가 발생했습니다: {str(e)}")
             return False
     
     def generate_export_options(self, network_data):

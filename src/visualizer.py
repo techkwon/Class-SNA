@@ -16,14 +16,18 @@ import platform
 import re
 import warnings
 
-# matplotlib 경고 메시지 필터링 강화
+# matplotlib 경고 메시지 필터링 강화 - 모든 폰트 관련 경고 필터링
 warnings.filterwarnings("ignore", "Glyph .* missing from current font")
 warnings.filterwarnings("ignore", "findfont: Font family .* not found")
 warnings.filterwarnings("ignore", category=UserWarning, module='matplotlib')
+warnings.filterwarnings("ignore", category=UserWarning, module='plotly')
+warnings.filterwarnings("ignore", category=UserWarning, module='pyvis')
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
+# 로깅 설정 - 파일 핸들러 추가하여 로그를 화면에 출력하지 않고 파일로 저장
+logging.basicConfig(level=logging.INFO, filename='network_analysis.log', filemode='w')
 logger = logging.getLogger(__name__)
+# 스트림 핸들러를 제거하여 콘솔에 출력되지 않도록 설정
+logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
 
 # Streamlit Cloud 환경인지 확인하는 함수 - 전역 함수로 정의
 def is_streamlit_cloud():
@@ -36,28 +40,21 @@ def set_korean_font():
     try:
         # Streamlit Cloud 환경 확인 - 전역 함수 사용
         if is_streamlit_cloud():
-            logger.info("Streamlit Cloud 환경이 감지되었습니다. 기본 영문 폰트를 사용합니다.")
             # 폰트 설정 없이 바로 리턴
-            logger.warning("Streamlit Cloud 환경에서는 한글 폰트를 사용할 수 없습니다. 영문 표기로 대체합니다.")
             return
             
         # 운영체제별 폰트 설정 (로컬 환경)
         system = platform.system()
         if system == 'Darwin':  # macOS
             plt.rc('font', family='AppleGothic')
-            logger.info("macOS 환경에서 AppleGothic 폰트를 사용합니다.")
         elif system == 'Windows':  # Windows
             plt.rc('font', family='Malgun Gothic')
-            logger.info("Windows 환경에서 Malgun Gothic 폰트를 사용합니다.")
         else:  # Linux 등 (로컬에서만 설치 시도)
             # 로컬 리눅스인지 Streamlit Cloud인지 추가 확인
             if "STREAMLIT" in os.environ:
-                logger.info("Streamlit Cloud의 Linux 환경이 감지되었습니다. 영문 폰트를 사용합니다.")
                 return
                 
             # 로컬 Linux 환경으로 판단
-            logger.info("로컬 Linux 환경이 감지되었습니다.")
-            
             # 이미 설치된 폰트 확인
             try:
                 # 사용 가능한 시스템 폰트 확인
@@ -77,21 +74,14 @@ def set_korean_font():
                 
                 if found_font:
                     plt.rc('font', family=found_font)
-                    logger.info(f"{found_font} 폰트를 사용합니다.")
-                else:
-                    # 한글 폰트를 찾지 못한 경우 기본 폰트 사용
-                    logger.warning("한글 폰트를 찾을 수 없습니다. 영문 표기로 대체합니다.")
-            except Exception as e:
-                logger.warning(f"폰트 검색 중 오류 발생: {str(e)}")
-                logger.warning("기본 폰트를 사용합니다. 영문 표기로 대체합니다.")
+            except Exception:
+                pass
         
         # 폰트 설정 확인
         plt.rc('axes', unicode_minus=False)  # 마이너스 기호 깨짐 방지
-        logger.info(f"폰트 설정 완료: {plt.rcParams['font.family']}")
         
-    except Exception as e:
-        logger.warning(f"한글 폰트 설정 실패: {str(e)}")
-        logger.warning("기본 폰트를 사용합니다. 영문 표기로 대체합니다.")
+    except Exception:
+        pass
 
 # 한글 폰트 설정 시도
 set_korean_font()
@@ -155,7 +145,6 @@ class NetworkVisualizer:
         # Streamlit Cloud 환경에서는 자동으로 로마자화 사용
         if is_streamlit_cloud():
             self.has_korean_font = False
-            logger.info("Streamlit Cloud 환경에서는 로마자화를 기본으로 사용합니다.")
             
         # 노드 이름 매핑 (원래 이름 -> 로마자화된 이름)
         self.name_mapping = {}
@@ -211,195 +200,115 @@ class NetworkVisualizer:
     def create_plotly_network(self, layout="fruchterman", width=800, height=600):
         """Plotly를 사용한 인터랙티브 네트워크 그래프 생성"""
         try:
-            # 레이아웃 알고리즘 선택
-            if layout == "fruchterman":
-                pos = nx.fruchterman_reingold_layout(self.graph)
-            elif layout == "spring":
+            # 노드 정보 준비
+            node_x = []
+            node_y = []
+            node_text = []  # 노드 텍스트 (한글 이름 또는 로마자화된 이름)
+            node_size = []  # 노드 크기
+            node_color = []  # 노드 색상
+            
+            # 그래프 레이아웃 계산
+            if layout == "spring":
                 pos = nx.spring_layout(self.graph)
             elif layout == "circular":
                 pos = nx.circular_layout(self.graph)
-            elif layout == "shell":
-                pos = nx.shell_layout(self.graph)
-            else:
+            elif layout == "kamada":
                 pos = nx.kamada_kawai_layout(self.graph)
+            else:  # fruchterman
+                pos = nx.fruchterman_reingold_layout(self.graph)
             
-            # 중심성 지표가 계산되어 있는지 확인
-            if not self.metrics:
-                self.analyzer.calculate_centrality()
+            # 노드 중심성 및 커뮤니티 값 가져오기
+            in_degree = self.metrics.get('in_degree', {})
+            communities = self.communities
             
-            # 노드 크기 계산 (in_degree 기준)
-            node_size = {node: (self.metrics["in_degree"][node] * 50) + 10 for node in self.graph.nodes()}
+            # 노드 색상 팔레트 설정 (색약자를 위한 색상)
+            color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+                             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
             
-            # 커뮤니티 정보가 없으면 탐지
-            if not self.communities:
-                self.analyzer.detect_communities()
-            
-            # 커뮤니티별 색상 할당
-            community_colors = {}
-            color_palette = list(mcolors.TABLEAU_COLORS.values())
-            unique_communities = set(self.communities.values())
-            
-            for i, comm_id in enumerate(unique_communities):
-                color_idx = i % len(color_palette)
-                community_colors[comm_id] = color_palette[color_idx]
-            
-            # 한글 폰트 문제 확인 및 대응
-            use_romanized = not self.has_korean_font
-            
-            if use_romanized:
-                # 영문 변환된 노드 이름 표시 안내
-                st.info("한글 폰트 문제로 인해 학생 이름이 영문으로 표시됩니다.")
-                
-                # 매핑 테이블 생성
-                original_names = list(self.graph.nodes())
-                romanized_names = [self._get_display_label(node, use_romanized=True) for node in original_names]
-                name_map = dict(zip(romanized_names, original_names))
-                
-                # 매핑 테이블 표시
-                with st.expander("학생 이름 매핑 테이블", expanded=False):
-                    mapping_df = pd.DataFrame({
-                        "영문 표시": romanized_names,
-                        "원래 이름": original_names
-                    })
-                    st.dataframe(mapping_df)
-            
-            # Plotly용 그래프 데이터 준비
-            edge_x = []
-            edge_y = []
-            edge_text = []
-            edge_width = []
-            
-            for edge in self.graph.edges(data=True):
-                x0, y0 = pos[edge[0]]
-                x1, y1 = pos[edge[1]]
-                
-                # 곡선형 엣지 그리기
-                edge_x.append(x0)
-                edge_x.append(x1)
-                edge_x.append(None)
-                edge_y.append(y0)
-                edge_y.append(y1)
-                edge_y.append(None)
-                
-                # 엣지 텍스트 및 두께
-                weight = edge[2].get('weight', 1)
-                
-                # 한글 폰트 문제가 있으면 로마자 변환
-                if use_romanized:
-                    from_node = self._get_display_label(edge[0], use_romanized=True)
-                    to_node = self._get_display_label(edge[1], use_romanized=True)
-                    # 원래 이름도 보여주기 (괄호 안에)
-                    edge_text.append(f"{from_node} → {to_node}, 가중치: {weight}")
-                else:
-                    edge_text.append(f"{edge[0]} → {edge[1]}, 가중치: {weight}")
-                    
-                edge_width.append(weight)
-            
-            node_x = []
-            node_y = []
-            node_text = []
-            node_sizes = []
-            node_colors = []
-            node_labels = []  # 표시할 레이블
-            
+            # 노드 데이터 구성
             for node in self.graph.nodes():
                 x, y = pos[node]
                 node_x.append(x)
                 node_y.append(y)
                 
-                # 로마자 변환 여부에 따라 표시 레이블 결정
-                if use_romanized:
-                    display_name = self._get_display_label(node, use_romanized=True)
-                    node_labels.append(display_name)
+                # 노드 텍스트 (이름) 설정
+                display_name = self._get_display_label(node)
+                node_text.append(f"이름: {display_name}")
+                
+                # 노드 크기 설정: 연결 중심성(In)에 비례
+                size = in_degree.get(node, 0) * 10 + 10  # 기본 크기 10, 연결 중심성에 따라 증가
+                node_size.append(size)
+                
+                # 노드 색상 설정: 커뮤니티에 따라
+                if node in communities:
+                    node_color.append(color_palette[communities[node] % len(color_palette)])
                 else:
-                    display_name = node
-                    node_labels.append(node)
-                
-                # 노드 텍스트: 학생 이름과 중심성 정보 포함
-                text = f"{node}<br>"
-                text += f"연결 중심성(In): {self.metrics['in_degree'][node]:.3f}<br>"
-                text += f"연결 중심성(Out): {self.metrics['out_degree'][node]:.3f}<br>"
-                text += f"매개 중심성: {self.metrics['betweenness'][node]:.3f}"
-                node_text.append(text)
-                
-                # 노드 크기 및 색상
-                node_sizes.append(node_size[node])
-                
-                comm_id = self.communities.get(node, 0)
-                node_colors.append(community_colors.get(comm_id, '#CCCCCC'))
+                    node_color.append('#7f7f7f')  # 기본 회색
             
-            # 엣지 트레이스
+            # 에지(연결선) 정보 준비
+            edge_x = []
+            edge_y = []
+            edge_width = []
+            
+            # 에지 데이터 구성
+            for edge in self.graph.edges(data=True):
+                source, target = edge[0], edge[1]
+                x0, y0 = pos[source]
+                x1, y1 = pos[target]
+                
+                # 곡선 에지를 위한 중간점 계산
+                edge_x.append(x0)
+                edge_x.append(x1)
+                edge_x.append(None)  # 선 구분을 위한 None
+                edge_y.append(y0)
+                edge_y.append(y1)
+                edge_y.append(None)  # 선 구분을 위한 None
+                
+                # 에지 두께 설정: 가중치에 비례
+                weight = edge[2].get('weight', 1)
+                edge_width.append(weight)
+            
+            # 에지 트레이스 생성
             edge_trace = go.Scatter(
                 x=edge_x, y=edge_y,
-                line=dict(width=0.5, color='#888'),
-                hoverinfo='text',
-                text=edge_text,
-                mode='lines')
-            
-            # 노드 트레이스
-            node_trace = go.Scatter(
-                x=node_x, y=node_y,
-                mode='markers+text',  # 텍스트 추가
-                hoverinfo='text',
-                text=node_text,
-                textposition="top center",  # 텍스트 위치
-                textfont=dict(size=10),  # 텍스트 크기
-                marker=dict(
-                    showscale=False,
-                    color=node_colors,
-                    size=node_sizes,
-                    line=dict(width=1, color='#888')
-                ))
-            
-            # 노드 레이블 트레이스 추가
-            label_trace = go.Scatter(
-                x=node_x, y=node_y,
-                mode='text',
-                text=node_labels,
-                textposition="top center",
-                textfont=dict(
-                    family="Arial, sans-serif",  # 범용 폰트 사용
-                    size=12,
-                    color="black"
-                ),
-                hoverinfo='none'
+                line=dict(width=1, color='#888'),
+                hoverinfo='none',
+                mode='lines',
+                showlegend=False
             )
             
-            # 그래프 레이아웃
-            fig = go.Figure(
-                data=[edge_trace, node_trace, label_trace],  # 레이블 트레이스 추가
-                layout=go.Layout(
-                    title="학급 관계 네트워크",
-                    showlegend=False,
-                    hovermode='closest',
-                    margin=dict(b=20, l=5, r=5, t=40),
-                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                    width=width,
-                    height=height
-                ))
+            # 노드 트레이스 생성
+            node_trace = go.Scatter(
+                x=node_x, y=node_y,
+                mode='markers',
+                hoverinfo='text',
+                text=node_text,
+                marker=dict(
+                    color=node_color,
+                    size=node_size,
+                    line=dict(width=1, color='#888')
+                ),
+                showlegend=False
+            )
+            
+            # 레이아웃 및 그래프 생성
+            layout_config = dict(
+                showlegend=False,
+                hovermode='closest',
+                margin=dict(b=0, l=0, r=0, t=60),
+                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                width=width,
+                height=height,
+                title='학급 관계 네트워크 그래프<br><span style="font-size:12px;">크기: 인기도(선택받은 횟수) | 색상: 같은 그룹</span>'
+            )
+            
+            fig = go.Figure(data=[edge_trace, node_trace], layout=layout_config)
             
             return fig
             
         except Exception as e:
-            logger.error(f"Plotly 네트워크 그래프 생성 실패: {str(e)}")
             st.error(f"네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
-            
-            # 오류 발생 시 네트워크 데이터 표시
-            st.write("### 네트워크 데이터")
-            
-            if hasattr(self, 'graph') and self.graph:
-                # 노드 정보 표시
-                nodes_df = pd.DataFrame({
-                    "학생": list(self.graph.nodes()),
-                    "연결 중심성(In)": [self.metrics["in_degree"].get(node, 0) for node in self.graph.nodes()],
-                    "연결 중심성(Out)": [self.metrics["out_degree"].get(node, 0) for node in self.graph.nodes()],
-                    "매개 중심성": [self.metrics["betweenness"].get(node, 0) for node in self.graph.nodes()],
-                    "커뮤니티": [self.communities.get(node, -1) for node in self.graph.nodes()]
-                })
-                st.write("#### 노드 (학생) 정보")
-                st.dataframe(nodes_df)
-            
             return None
     
     def create_pyvis_network(self, height="500px", width="100%"):
@@ -562,126 +471,65 @@ class NetworkVisualizer:
             return None
     
     def create_centrality_plot(self, metric="in_degree", top_n=10):
-        """중심성 지표 막대 그래프 생성"""
+        """중심성 지표 시각화"""
         try:
-            if not self.metrics:
-                self.analyzer.calculate_centrality()
-            
             # 지표 선택
             if metric not in self.metrics:
-                raise ValueError(f"지원하지 않는 중심성 지표입니다: {metric}")
+                st.error(f"요청한 중심성 지표({metric})가 존재하지 않습니다.")
+                return None
             
-            # 중심성 값 정렬 및 상위 N개 선택
+            # 선택된 지표 값 가져오기
             metric_values = self.metrics[metric]
-            sorted_values = sorted(metric_values.items(), key=lambda x: x[1], reverse=True)
-            top_items = sorted_values[:top_n]
             
-            # 데이터 준비
-            nodes = [item[0] for item in top_items]
-            values = [item[1] for item in top_items]
+            # 데이터프레임 변환 및 정렬
+            df = pd.DataFrame(metric_values.items(), columns=['이름', '값'])
+            df = df.sort_values('값', ascending=False).head(top_n)
             
-            # 한글 폰트 문제 확인 및 대응
-            use_romanized = not self.has_korean_font
-            
-            if use_romanized:
-                # 영문 변환된 노드 이름 사용
-                display_nodes = [self._get_display_label(node, use_romanized=True) for node in nodes]
-                # 원래 이름을 표시하기 위한 매핑 테이블
-                name_map = {self._get_display_label(node, use_romanized=True): node for node in nodes}
-                
-                st.info("한글 폰트 문제로 인해 학생 이름이 영문으로 표시됩니다.")
-                
-                # 매핑 테이블 표시
-                with st.expander("학생 이름 매핑 테이블", expanded=False):
-                    mapping_df = pd.DataFrame({
-                        "영문 표시": list(name_map.keys()),
-                        "원래 이름": list(name_map.values())
-                    })
-                    st.dataframe(mapping_df)
+            # 표시 이름 변환
+            if not self.has_korean_font:
+                df['표시이름'] = df['이름'].apply(lambda x: self._get_display_label(x))
             else:
-                # 한글 폰트 사용 가능하면 원래 이름 사용
-                display_nodes = nodes
+                df['표시이름'] = df['이름']
             
-            # matplotlib 그래프 생성
+            # 그래프 생성
             fig, ax = plt.subplots(figsize=(10, 6))
-            bars = ax.barh(display_nodes, values, color='lightblue')
+            bars = ax.barh(df['표시이름'], df['값'], color='skyblue')
             
-            # 그래프 스타일 설정
-            ax.set_xlabel(f'{metric} 중심성 지표')
-            ax.set_ylabel('학생')
+            # 그래프 스타일링
+            ax.set_xlabel('중심성 지표 값')
             
-            metric_names = {
-                "in_degree": "연결 중심성(In)",
-                "out_degree": "연결 중심성(Out)",
-                "closeness": "근접 중심성",
-                "betweenness": "매개 중심성",
-                "eigenvector": "아이겐벡터 중심성"
+            # 중심성 지표별 적절한 제목 설정
+            metric_titles = {
+                'in_degree': '인기도 (선택받은 횟수)',
+                'out_degree': '친밀도 (선택한 횟수)',
+                'betweenness': '중재자 역할',
+                'closeness': '정보 접근성'
             }
+            title = metric_titles.get(metric, metric)
+            ax.set_title(f'상위 {top_n}명 학생의 {title}')
             
-            ax.set_title(f'상위 {top_n}명 학생의 {metric_names.get(metric, metric)} 지표')
-            
-            # 값 레이블 추가
+            # 값 주석 추가
             for bar in bars:
                 width = bar.get_width()
-                ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, f'{width:.3f}', 
-                        ha='left', va='center')
+                ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
+                        f'{width:.2f}', va='center')
             
-            # 그리드 추가
-            ax.grid(True, axis='x', linestyle='--', alpha=0.7)
+            # 범례 추가 - 원본 이름과 표시 이름을 표시
+            if not self.has_korean_font and len(df) > 0:
+                legend_text = "학생 이름 참조표:\n"
+                for _, row in df.iterrows():
+                    orig_name = row['이름']
+                    disp_name = row['표시이름']
+                    if orig_name != disp_name:
+                        legend_text += f"{disp_name} = {orig_name}\n"
+                plt.figtext(0.5, 0.01, legend_text, ha="center", fontsize=9, 
+                           bbox={"facecolor":"lightgrey", "alpha":0.5, "pad":5})
             
             plt.tight_layout()
-            
-            # Plotly로 대체 그래프 생성 (한글 폰트 문제가 있는 경우)
-            if use_romanized:
-                # 원본 노드 이름 데이터
-                original_nodes = nodes
-                values_dict = {node: value for node, value in zip(original_nodes, values)}
-                
-                # 한글과 로마자 모두 표시하는 Plotly 그래프 생성
-                fig_plotly = go.Figure()
-                
-                # 막대 그래프 추가
-                fig_plotly.add_trace(go.Bar(
-                    y=display_nodes,
-                    x=values,
-                    orientation='h',
-                    marker_color='lightblue',
-                    text=[f"{values_dict[original_node]:.3f}" for original_node in original_nodes],
-                    textposition='outside',
-                    hovertext=[f"{original_node}: {values_dict[original_node]:.3f}" for original_node in original_nodes]
-                ))
-                
-                # 레이아웃 설정
-                fig_plotly.update_layout(
-                    title=f'상위 {top_n}명 학생의 {metric_names.get(metric, metric)} 지표',
-                    xaxis_title=f'{metric} 중심성 지표',
-                    yaxis_title='학생',
-                    height=500,
-                    width=700
-                )
-                
-                # 플롯리 그래프 표시 (대체 방법)
-                st.write("### Plotly로 생성한 대체 그래프")
-                st.plotly_chart(fig_plotly)
-            
             return fig
             
         except Exception as e:
-            logger.error(f"중심성 지표 그래프 생성 실패: {str(e)}")
-            # 대체 방법으로 데이터 테이블 표시
-            st.error(f"그래프 생성 중 오류가 발생했습니다: {str(e)}")
-            
-            # 값 테이블로 대체 표시
-            if 'metric_values' in locals() and 'sorted_values' in locals() and 'top_items' in locals():
-                st.write("### 중심성 지표 데이터 (테이블)")
-                
-                # 상위 N개 항목 데이터프레임 생성
-                df = pd.DataFrame({
-                    "학생": [item[0] for item in top_items],
-                    f"{metric} 값": [item[1] for item in top_items]
-                })
-                st.dataframe(df)
-            
+            st.error(f"중심성 지표 시각화 중 오류가 발생했습니다: {str(e)}")
             return None
     
     def create_community_table(self):
