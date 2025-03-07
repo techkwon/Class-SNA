@@ -3,6 +3,7 @@ import logging
 import time
 import streamlit as st
 import requests
+import json
 from config import get_random_api_key, APP_SETTINGS
 
 # 로깅 설정
@@ -168,6 +169,67 @@ class APIManager:
 2024-01-05,학생5,학생1;학생4,학생2"""
         
         return example_data.encode('utf-8')
+    
+    def get_ai_analysis(self, prompt):
+        """인공지능을 통한 데이터 구조 분석
+        
+        Args:
+            prompt (str): 분석 요청 프롬프트
+            
+        Returns:
+            dict: 분석 결과
+        """
+        try:
+            # AI 응답 요청
+            response_text = self.generate_response(prompt)
+            
+            # JSON 추출 시도
+            try:
+                # 응답에서 JSON만 추출
+                json_str = self._extract_json_from_text(response_text)
+                result = json.loads(json_str)
+                return result
+            except json.JSONDecodeError as e:
+                logger.warning(f"AI 응답에서 유효한 JSON을 추출할 수 없습니다: {str(e)}")
+                # 대체 결과 반환
+                return self._get_default_analysis_result()
+                
+        except Exception as e:
+            logger.warning(f"AI 분석 중 오류 발생: {str(e)}")
+            return self._get_default_analysis_result()
+    
+    def _extract_json_from_text(self, text):
+        """텍스트에서 JSON 부분만 추출"""
+        # JSON 시작/끝 위치 찾기
+        start_idx = text.find('{')
+        if start_idx == -1:
+            raise ValueError("JSON 시작 기호 '{' 를 찾을 수 없습니다.")
+        
+        # 중괄호 균형 맞추기
+        balance = 0
+        for i in range(start_idx, len(text)):
+            if text[i] == '{':
+                balance += 1
+            elif text[i] == '}':
+                balance -= 1
+                
+            if balance == 0:
+                end_idx = i + 1
+                return text[start_idx:end_idx]
+        
+        raise ValueError("JSON 형식이 완전하지 않습니다.")
+    
+    def _get_default_analysis_result(self):
+        """기본 분석 결과 생성"""
+        return {
+            'relationship_types': {
+                '좋아하는 친구': 'friendship',
+                '함께 공부하고 싶은 친구': 'study',
+                '함께 프로젝트 하고 싶은 친구': 'collaboration'
+            },
+            'data_characteristics': '기본 설문조사 형식',
+            'conversion_recommendation': '1:N 관계로 변환 필요'
+        }
     
     def generate_response(self, prompt, max_retries=3):
         """Gemini API를 사용하여 응답 생성"""

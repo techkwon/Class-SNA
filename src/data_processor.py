@@ -128,8 +128,8 @@ class DataProcessor:
         # 모든 컬럼명에서 중복되는 숫자 제거 (구글 설문지 형식)
         df.columns = [re.sub(r'\.\d+$', '', col) if isinstance(col, str) else col for col in df.columns]
         
-        # 빈 값과 공백 처리
-        df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+        # 빈 값과 공백 처리 (deprecation 경고 해결)
+        df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
         df = df.replace(['', ' ', 'nan', 'NaN', 'null', 'NULL'], np.nan)
         
         # 모든 값이 비어있는 열 제거
@@ -147,7 +147,8 @@ class DataProcessor:
             'relationship_columns': [], # 관계 질문 열
             'relationship_types': [],   # 관계 유형 (친구, 협업 등)
             'students': set(),          # 모든 학생 목록
-            'metadata': {}              # 기타 메타데이터
+            'metadata': {},             # 기타 메타데이터
+            'dataframe': df             # 데이터프레임 추가
         }
         
         # 열 분석하여 응답자 열과 관계 질문 열 구분
@@ -181,8 +182,17 @@ class DataProcessor:
         }
         
         # 인공지능으로 관계 유형 추정 요청
-        insights = self._get_ai_insights(df, result)
-        result['ai_insights'] = insights
+        try:
+            insights = self._get_ai_insights(df, result)
+            result['ai_insights'] = insights
+        except Exception as e:
+            logger.warning(f"AI 인사이트 분석 중 오류 발생: {str(e)}")
+            # 오류 발생 시 기본 인사이트 생성
+            result['ai_insights'] = {
+                'relationship_types': {col: 'general' for col in result['relationship_columns']},
+                'data_characteristics': '자동 분석 실패',
+                'conversion_recommendation': '기본 변환 방법 사용'
+            }
         
         logger.info(f"데이터 구조 분석 완료: {len(result['students'])}명의 학생, {len(result['relationship_columns'])}개의 관계 질문 식별됨")
         return result
@@ -328,17 +338,17 @@ class DataProcessor:
         
         # 결과 저장 구조
         network_data = {
-            'students': [],
-            'relationships': [],
+            'students': [],  # 학생 노드 목록
+            'relationships': [],  # 관계 엣지 목록
             'metadata': {
-                'relationship_types': analysis_result['relationship_types'],
-                'num_students': len(analysis_result['students']),
+                'relationship_types': analysis_result.get('relationship_types', []),
+                'num_students': len(analysis_result.get('students', [])),
                 'num_relationships': 0
             }
         }
         
         # 학생 노드 생성
-        for i, student in enumerate(analysis_result['students']):
+        for i, student in enumerate(analysis_result.get('students', [])):
             # 학생 이름이 None이거나 빈 문자열이면 건너뜀
             if not student or pd.isna(student):
                 continue
@@ -362,11 +372,12 @@ class DataProcessor:
             relationship_columns = analysis_result.get('relationship_columns', [])
             respondent_column = analysis_result.get('respondent_column')
             
-            if df is None:
+            if df is None or df.empty:
                 # 데이터프레임이 없으면 AI의 인사이트 기반으로 가상 데이터 생성
                 logger.warning("데이터프레임 없음, AI 인사이트 기반 관계 생성")
+                ai_insights = analysis_result.get('ai_insights', {})
                 network_data['relationships'] = self._generate_relationships_from_ai_insights(
-                    analysis_result['ai_insights'], 
+                    ai_insights, 
                     network_data['students']
                 )
             else:
@@ -418,11 +429,29 @@ class DataProcessor:
         
         except Exception as e:
             logger.error(f"관계 데이터 변환 중 오류: {str(e)}")
+            logger.error(traceback.format_exc())
             # 오류 발생 시 기본 랜덤 관계 생성
             network_data['relationships'] = self._generate_random_relationships(network_data['students'])
         
         # 메타데이터 업데이트
         network_data['metadata']['num_relationships'] = len(network_data['relationships'])
+        
+        # 데이터 구조 변환 - pandas DataFrame 형식으로
+        try:
+            # 노드 데이터프레임 생성
+            nodes_df = pd.DataFrame(network_data['students'])
+            
+            # 엣지 데이터프레임 생성
+            edges_df = pd.DataFrame(network_data['relationships'])
+            
+            # 결과 데이터에 추가
+            network_data['nodes'] = nodes_df
+            network_data['edges'] = edges_df
+        except Exception as e:
+            logger.error(f"데이터프레임 변환 오류: {str(e)}")
+            # 기본 빈 데이터프레임 생성
+            network_data['nodes'] = pd.DataFrame(columns=['id', 'name', 'group'])
+            network_data['edges'] = pd.DataFrame(columns=['source', 'target', 'type', 'value'])
         
         logger.info(f"네트워크 데이터 변환 완료: {len(network_data['students'])}명의 학생, {len(network_data['relationships'])}개의 관계")
         return network_data
@@ -434,11 +463,29 @@ class DataProcessor:
         # 학생 ID 리스트
         student_ids = [s['id'] for s in students]
         
+        # 학생 수가 없으면 빈 관계 목록 반환
+        if not student_ids:
+            return relationships
+        
         # AI 인사이트에서 관계 정보 추출
         relationship_types = ai_insights.get('relationship_types', {'friendship': 0.6, 'collaboration': 0.4})
         
+        # 문자열을 숫자로 변환하는 함수
+        def str_to_float(value, default=0.5):
+            try:
+                if isinstance(value, (int, float)):
+                    return float(value)
+                if isinstance(value, str) and value.replace('.', '', 1).isdigit():
+                    return float(value)
+                return default
+            except:
+                return default
+        
         # 관계 유형별 확률
         for rel_type, probability in relationship_types.items():
+            # 확률을 숫자로 변환
+            prob = str_to_float(probability, 0.5)
+            
             # 각 학생에 대해
             for source_id in student_ids:
                 # 관계 확률에 따라 대상 학생 선택
@@ -448,11 +495,11 @@ class DataProcessor:
                         continue
                         
                     # 확률에 따라 관계 생성
-                    if np.random.random() < probability:
+                    if np.random.random() < prob:
                         relationships.append({
                             'source': source_id,
                             'target': target_id,
-                            'type': rel_type,
+                            'type': str(rel_type),
                             'value': np.random.randint(1, 4)  # 1-3 사이의 강도
                         })
         
@@ -465,6 +512,10 @@ class DataProcessor:
         # 학생 ID 리스트
         student_ids = [s['id'] for s in students]
         
+        # 학생이 없으면 빈 관계 목록 반환
+        if not student_ids:
+            return relationships
+        
         # 관계 유형
         rel_types = ['friendship', 'collaboration', 'help']
         
@@ -472,20 +523,24 @@ class DataProcessor:
         for source_id in student_ids:
             # 1-5명의 다른 학생과 관계 생성
             num_relations = np.random.randint(1, min(6, len(students)))
-            targets = np.random.choice(
-                [id for id in student_ids if id != source_id], 
-                size=min(num_relations, len(students)-1), 
-                replace=False
-            )
             
-            for target_id in targets:
-                rel_type = np.random.choice(rel_types)
-                relationships.append({
-                    'source': source_id,
-                    'target': target_id,
-                    'type': rel_type,
-                    'value': np.random.randint(1, 4)  # 1-3 사이의 강도
-                })
+            # 다른 학생 목록 생성
+            other_students = [id for id in student_ids if id != source_id]
+            
+            # 목록이 비어있지 않은 경우에만 처리
+            if other_students:
+                # 샘플 크기가 목록 크기보다 크지 않도록 제한
+                sample_size = min(num_relations, len(other_students))
+                targets = np.random.choice(other_students, size=sample_size, replace=False)
+                
+                for target_id in targets:
+                    rel_type = np.random.choice(rel_types)
+                    relationships.append({
+                        'source': source_id,
+                        'target': target_id,
+                        'type': rel_type,
+                        'value': np.random.randint(1, 4)  # 1-3 사이의 강도
+                    })
         
         return relationships
     
