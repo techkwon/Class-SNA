@@ -394,173 +394,104 @@ def main():
 
 # 분석 결과 표시 함수
 def show_analysis_results():
-    """저장된 분석 결과를 간략하게 표시합니다"""
+    """분석 결과 표시 페이지"""
     try:
-        # 세션에서 network_data 가져오기
-        network_data = st.session_state.network_data
+        # 사이드바 제거
+        st.markdown(
+            """
+            <style>
+            [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
+                width: 0px;
+            }
+            [data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
+                width: 0px;
+                margin-left: -500px;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
         
-        if not network_data:
-            st.error("분석할 네트워크 데이터가 없습니다.")
+        # 결과가 있는지 확인
+        if 'network_analyzer' not in st.session_state or not st.session_state.network_analyzer:
+            st.error("분석 결과가 없습니다. 먼저 데이터를 업로드하고 분석을 실행해주세요.")
+            if st.button("데이터 업로드 화면으로 돌아가기"):
+                st.session_state.page = 'upload'
+                st.rerun()
             return
-            
-        # 분석 객체 생성
-        analyzer = NetworkAnalyzer(network_data)
-        
-        # 시각화 객체 생성
-        visualizer = NetworkVisualizer(analyzer)
-        
+
+        # 분석기 가져오기
+        analyzer = st.session_state.network_analyzer
+
         # 보고서 생성기 초기화
-        report_generator = ReportGenerator(analyzer, visualizer)
-        
-        # 탭 구성 (최소한의 탭만 유지)
-        tab1, tab2 = st.tabs(["네트워크 시각화", "중심성 분석"])
-        
-        # 탭 1: 네트워크 시각화
+        if 'report_generator' not in st.session_state:
+            st.session_state.report_generator = ReportGenerator(analyzer)
+        report_generator = st.session_state.report_generator
+
+        # 상단 메뉴 탭
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📊 기본 분석", 
+            "🌐 대화형 네트워크", 
+            "📈 중심성 분석", 
+            "👥 그룹 분석",
+            "⚠️ 고립 학생"
+        ])
+
+        # 탭 1: 기본 분석
         with tab1:
-            st.markdown("<div class='sub-header'>네트워크 시각화</div>", unsafe_allow_html=True)
-            
-            # 레이아웃 옵션
-            col1, col2 = st.columns([1, 3])
-            
-            with col1:
-                # 레이아웃 선택
-                layout = st.selectbox(
-                    "레이아웃:", 
-                    options=["fruchterman", "force", "circular"],
-                    format_func=lambda x: {"fruchterman": "방사형", "force": "힘 기반", "circular": "원형"}[x],
-                    index=0,
-                    key="layout_selector"
-                )
-            
-            # 네트워크 시각화 표시
-            try:
-                # Plotly 네트워크 시각화 생성
-                fig = visualizer.create_plotly_network(
-                    layout=layout,
-                    width=None,  # 자동 너비 조정
-                    height=600
-                )
-                
-                if fig:
-                    # Plotly 차트 표시
-                    st.plotly_chart(fig, use_container_width=True, config={
-                        'displayModeBar': True,
-                        'scrollZoom': True,
-                        'displaylogo': False,
-                        'toImageButtonOptions': {
-                            'format': 'png',
-                            'filename': f'network_{layout}',
-                            'height': 600,
-                            'width': 900,
-                            'scale': 2
-                        }
-                    })
-                else:
-                    st.error("네트워크 시각화를 생성할 수 없습니다.")
-            except Exception as e:
-                st.error(f"네트워크 시각화 생성 중 오류: {str(e)}")
-        
-        # 탭 2: 중심성 분석
+            report_generator.show_basic_analysis()
+
+        # 탭 2: 대화형 네트워크 시각화 (Plotly 사용)
         with tab2:
-            st.markdown("<div class='sub-header'>중심성 분석</div>", unsafe_allow_html=True)
-            
-            # 중심성 지표 선택
-            col1, col2 = st.columns([1, 3])
-            
-            with col1:
-                # 중심성 지표 목록 (간략화)
-                metrics = {
-                    'in_degree': '인기도 (In-Degree)',
-                    'out_degree': '활동성 (Out-Degree)',
-                    'betweenness': '매개 중심성'
-                }
-                
-                # 중심성 지표 선택
-                metric = st.selectbox(
-                    '중심성 지표:', 
-                    options=list(metrics.keys()),
-                    format_func=lambda x: metrics[x],
-                    index=0,
-                    key='metric_selector'
-                )
-                
-                # 표시할 학생 수
-                top_n = st.slider(
-                    '상위 표시 개수:', 
-                    min_value=5, 
-                    max_value=20, 
-                    value=10,
-                    step=5,
-                    key='top_n_slider'
-                )
-            
-            with col2:
-                # 중심성 지표 설명
-                descriptions = {
-                    'in_degree': """
-                    **인기도(In-Degree)** 중심성은 한 학생에게 들어오는 연결의 수를 측정합니다.
-                    인기도가 높은 학생은 많은 다른 학생들이 선택한 학생입니다.
-                    """,
-                    'out_degree': """
-                    **활동성(Out-Degree)** 중심성은 한 학생이 다른 학생들을 선택한 수를 측정합니다.
-                    활동성이 높은 학생은 많은 다른 학생들을 선택한 학생입니다.
-                    """,
-                    'betweenness': """
-                    **매개(Betweenness)** 중심성은 학생이 다른 학생들 사이의 최단 경로에 위치하는 정도를 측정합니다.
-                    매개 중심성이 높은 학생은 여러 그룹을 연결하는 역할을 합니다.
-                    """
-                }
-                
-                # 선택한 지표 설명 표시
-                if metric in descriptions:
-                    st.info(descriptions[metric])
-            
-            # 중심성 차트
-            try:
-                # 중심성 플롯 생성
-                fig = visualizer.create_centrality_plot(metric=metric, top_n=top_n)
-                if fig:
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("중심성 시각화를 생성할 수 없습니다.")
-                    
-                # 중심성 데이터 표 생성
-                centrality_data = visualizer.get_centrality_metrics()
-                if centrality_data and metric in centrality_data:
-                    # 데이터 추출 및 정렬
-                    data = centrality_data[metric]
-                    data_list = [(k, v) for k, v in data.items()]
-                    data_list.sort(key=lambda x: x[1], reverse=True)
-                    data_list = data_list[:top_n]
-                    
-                    # 데이터프레임 생성
-                    df = pd.DataFrame(data_list, columns=['학생', f'{metrics[metric]} 점수'])
-                    
-                    # 한글 이름 가져오기
-                    df['학생'] = df['학생'].apply(lambda x: visualizer._get_original_name(x) if hasattr(visualizer, '_get_original_name') else x)
-                    
-                    # 값 반올림
-                    df[f'{metrics[metric]} 점수'] = df[f'{metrics[metric]} 점수'].apply(lambda x: round(x, 3))
-                    
-                    # 표 표시
-                    st.markdown(f"#### 상위 {top_n}명 학생")
-                    st.dataframe(df, use_container_width=True)
-                    
-                    # CSV 다운로드 버튼
-                    csv = df.to_csv(index=False).encode('utf-8-sig')
-                    st.download_button(
-                        label="CSV로 다운로드",
-                        data=csv,
-                        file_name=f'중심성_{metric}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-                        mime='text/csv',
-                    )
-                else:
-                    st.warning(f"{metrics[metric]} 데이터를 사용할 수 없습니다.")
-            except Exception as e:
-                st.error(f"중심성 분석 표시 중 오류: {str(e)}")
-    
+            report_generator.show_interactive_network()
+
+        # 탭 3: 중심성 분석
+        with tab3:
+            report_generator.show_centrality_analysis()
+
+        # 탭 4: 그룹 분석
+        with tab4:
+            report_generator.show_community_analysis()
+
+        # 탭 5: 고립 학생 분석
+        with tab5:
+            report_generator.show_isolated_students()
+
+        # CSV 내보내기 버튼
+        st.sidebar.header("데이터 내보내기")
+        if st.sidebar.button("분석 결과 CSV 내보내기"):
+            csv_data = report_generator.export_to_csv()
+            st.sidebar.download_button(
+                label="CSV 파일 다운로드",
+                data=csv_data,
+                file_name="social_network_analysis_results.csv",
+                mime="text/csv",
+            )
+
+        # 보고서 생성 버튼
+        if st.sidebar.button("전체 보고서 생성"):
+            report_pdf = report_generator.generate_pdf_report()
+            st.sidebar.download_button(
+                label="PDF 보고서 다운로드",
+                data=report_pdf,
+                file_name="social_network_analysis_report.pdf",
+                mime="application/pdf",
+            )
+
+        # 홈으로 돌아가기 버튼
+        if st.sidebar.button("새 분석 시작하기"):
+            # 세션 상태 초기화
+            for key in list(st.session_state.keys()):
+                if key != 'page':
+                    del st.session_state[key]
+            st.session_state.page = 'upload'
+            st.rerun()
+
     except Exception as e:
-        handle_error(f"분석 결과 표시 중 오류 발생: {str(e)}")
+        st.error(f"결과 표시 중 오류가 발생했습니다: {str(e)}")
+        logger.error(f"결과 표시 중 오류: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 if __name__ == "__main__":
     main() 

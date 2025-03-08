@@ -257,58 +257,164 @@ def romanize_korean(text):
     return result
 
 class NetworkVisualizer:
-    """네트워크 그래프 시각화 클래스"""
+    """인터랙티브 네트워크 시각화를 담당하는 클래스"""
     
-    def __init__(self, analyzer):
-        """NetworkAnalyzer 객체를 받아 초기화"""
+    def __init__(self, analyzer=None, graph=None, metrics=None, has_korean_font=False):
+        """
+        NetworkVisualizer 클래스 초기화
+        
+        Args:
+            analyzer: NetworkAnalyzer 인스턴스 (선택)
+            graph: 네트워크 그래프 (선택)
+            metrics: 중심성 지표 (선택)
+            has_korean_font: 한글 폰트 사용 가능 여부
+        """
         self.analyzer = analyzer
+        self.G = graph
+        self.metrics = metrics
+        self.has_korean_font = False  # 로마자화 기본 사용
         
-        # analyzer.G 또는 analyzer.graph 중 사용 가능한 것 사용
-        if hasattr(analyzer, 'G') and analyzer.G is not None:
-            self.G = analyzer.G.copy()
-        elif hasattr(analyzer, 'graph') and analyzer.graph is not None:
-            self.G = analyzer.graph.copy()
-        else:
-            # 어떤 속성도 없으면 빈 그래프 생성
-            self.G = nx.DiGraph()
-            logger.warning("분석기에서 그래프를 찾을 수 없어 빈 그래프를 생성합니다.")
-        
-        # 항상 로마자 이름 사용
-        self.has_korean_font = False
-        
-        # 원래 이름 매핑 저장
-        self.original_names = {}
-        for node in self.G.nodes():
-            # 노드가 문자열이 아닌 경우 처리
-            if isinstance(node, str):
-                # 한글 이름 저장
-                self.original_names[romanize_korean(node)] = node
-            else:
-                self.original_names[str(node)] = str(node)
-        
-        # 한글 폰트 확인 (결과에 상관없이 로마자화된 이름 사용)
+        # ID-이름 매핑 저장
+        self.id_mapping = {}  # id -> name
+        self.name_mapping = {}  # name -> id
+        self.original_names = {}  # 로마자 이름 -> 원래 이름
+                
+        # 글로벌 한글 폰트 설정 확인
         self._check_korean_font()
         
-        # 그래프 복사본 생성 (로마자 이름 사용)
-        self.G_roman = nx.DiGraph()
+        # 애널라이저에서 그래프와 메트릭스 가져오기
+        if analyzer:
+            if not self.G and hasattr(analyzer, 'graph'):
+                self.G = analyzer.graph
+            elif not self.G and hasattr(analyzer, 'G'):
+                self.G = analyzer.G
+                
+            if not self.metrics and hasattr(analyzer, 'metrics'):
+                self.metrics = analyzer.metrics
         
-        # 노드 복사 (이름 로마자화)
-        for node, data in self.G.nodes(data=True):
-            # 노드 이름 로마자화
-            roman_name = romanize_korean(str(node))
-            self.G_roman.add_node(roman_name, **data)
-            
-        # 엣지 복사 (이름 로마자화)
-        for u, v, data in self.G.edges(data=True):
-            u_roman = romanize_korean(str(u))
-            v_roman = romanize_korean(str(v))
-            self.G_roman.add_edge(u_roman, v_roman, **data)
-            
-        # 로마자 이름 매핑 저장
-        logging.info(f"로마자 이름 매핑 생성 완료: {len(self.original_names)}개")
+        # 로마자화된 그래프 생성
+        if self.G:
+            self.G_roman = self._create_romanized_graph(self.G)
+            # 원래 이름 그래프 생성 (실제 학생 이름 사용)
+            self.G_original = self._create_original_name_graph(self.G)
+    
+    def _create_original_name_graph(self, G):
+        """원래 이름을 사용하는 그래프 생성
         
-        self.communities = analyzer.communities
-        self.metrics = analyzer.metrics
+        Args:
+            G: 원본 그래프
+            
+        Returns:
+            nx.DiGraph: 원래 이름을 사용하는 그래프
+        """
+        try:
+            original_G = nx.DiGraph()
+            
+            # 노드 추가 (원래 이름 사용)
+            for node in G.nodes():
+                try:
+                    # 노드 데이터 복사
+                    attrs = G.nodes[node].copy() if G.nodes[node] else {}
+                    
+                    # 원래 이름 사용 (한글)
+                    original_name = str(node)
+                    if hasattr(self.analyzer, 'id_to_name') and node in self.analyzer.id_to_name:
+                        original_name = self.analyzer.id_to_name.get(node, str(node))
+                    
+                    # ID와 이름 매핑 저장
+                    self.id_mapping[node] = original_name
+                    self.name_mapping[original_name] = node
+                    
+                    # 원래 이름으로 노드 추가
+                    original_G.add_node(original_name, **attrs)
+                    
+                except Exception as e:
+                    logger.warning(f"노드 {node} 처리 중 오류: {str(e)}")
+                    # 오류 시 원본 노드명 그대로 사용
+                    original_G.add_node(str(node))
+            
+            # 엣지 추가
+            for u, v, data in G.edges(data=True):
+                try:
+                    # 원래 이름으로 변환
+                    orig_u = self.id_mapping.get(u, str(u))
+                    orig_v = self.id_mapping.get(v, str(v))
+                    
+                    # 엣지 추가
+                    original_G.add_edge(orig_u, orig_v, **data)
+                except Exception as e:
+                    logger.warning(f"엣지 {u}-{v} 처리 중 오류: {str(e)}")
+                    # 오류 시 원본 노드명 그대로 사용
+                    original_G.add_edge(str(u), str(v))
+            
+            return original_G
+        except Exception as e:
+            logger.error(f"원래 이름 그래프 생성 중 오류: {str(e)}")
+            # 오류 시 빈 그래프 반환
+            return nx.DiGraph()
+    
+    def _create_romanized_graph(self, G):
+        """로마자화된 그래프 생성
+        
+        Args:
+            G: 원본 그래프
+            
+        Returns:
+            nx.DiGraph: 로마자화된 그래프
+        """
+        try:
+            roman_G = nx.DiGraph()
+            
+            # 노드 추가 (로마자화)
+            for node in G.nodes():
+                try:
+                    # 노드 데이터 복사
+                    attrs = G.nodes[node].copy() if G.nodes[node] else {}
+                    
+                    # 이름 로마자화
+                    roman_name = self._romanize_name(str(node))
+                    
+                    # 원래 이름 저장
+                    self.original_names[roman_name] = str(node)
+                    
+                    # 로마자화된 이름으로 노드 추가
+                    roman_G.add_node(roman_name, **attrs)
+                    
+                except Exception as e:
+                    logger.warning(f"노드 {node} 로마자화 중 오류: {str(e)}")
+                    # 오류 시 원본 노드명 그대로 사용
+                    roman_G.add_node(str(node))
+            
+            # 엣지 추가
+            for u, v, data in G.edges(data=True):
+                try:
+                    # 노드 이름 로마자화
+                    roman_u = self._romanize_name(str(u))
+                    roman_v = self._romanize_name(str(v))
+                    
+                    # 엣지 추가
+                    roman_G.add_edge(roman_u, roman_v, **data)
+                except Exception as e:
+                    logger.warning(f"엣지 {u}-{v} 로마자화 중 오류: {str(e)}")
+                    # 오류 시 원본 노드명 그대로 사용
+                    roman_G.add_edge(str(u), str(v))
+            
+            return roman_G
+        except Exception as e:
+            logger.error(f"로마자화 그래프 생성 중 오류: {str(e)}")
+            # 오류 시 빈 그래프 반환
+            return nx.DiGraph()
+            
+    def _get_original_name(self, roman_name):
+        """로마자화된 이름에서 원래 이름 가져오기
+        
+        Args:
+            roman_name: 로마자화된 이름
+            
+        Returns:
+            str: 원래 이름
+        """
+        return self.original_names.get(roman_name, str(roman_name))
     
     def _check_korean_font(self):
         """한글 폰트 사용 가능 여부 확인"""
@@ -318,51 +424,34 @@ class NetworkVisualizer:
         # 항상 False로 설정 (로마자 사용)
         self.has_korean_font = False
         
-    def _get_display_label(self, node_name, use_romanized=True):
-        """노드 표시 레이블 생성
-        
-        내부 처리용으로는 로마자화된 이름을 사용하고,
-        사용자 표시용으로는 원래 한글 이름을 사용합니다.
-        """
-        if not node_name:
-            return "Unknown"
-            
-        # 로마자화된 이름
-        romanized_name = romanize_korean(str(node_name))
-        
-        # 항상 원래 이름 반환 (한글)
-        if romanized_name in self.original_names:
-            return self.original_names[romanized_name]
-        
-        # 없으면 원래 이름 그대로 반환
-        return str(node_name)
-    
-    def create_plotly_network(self, layout="fruchterman", width=900, height=700):
+    def _romanize_name(self, name):
+        """한글 이름을 로마자화된 이름으로 변환"""
+        return romanize_korean(name)
+
+    def create_plotly_network(self, layout="fruchterman", width=900, height=700, focus_node=None, neighbor_depth=1):
         """Plotly를 사용해 인터랙티브 네트워크 그래프 생성
         
         Args:
             layout (str): 그래프 레이아웃 알고리즘 ('fruchterman', 'spring', 'circular', 'kamada', 'spectral')
             width (int): 그래프 너비
             height (int): 그래프 높이
+            focus_node (str, optional): 중심으로 볼 노드 이름 (None이면 전체 그래프)
+            neighbor_depth (int, optional): 중심 노드로부터 포함할 이웃 깊이 (기본값: 1)
             
         Returns:
             go.Figure: Plotly 그래프 객체
         """
         try:
-            # 그래프 존재 확인
+            # 원래 이름 그래프 사용 (실제 학생 이름)
             G = None
-            if hasattr(self, 'G_roman') and self.G_roman is not None:
-                # 로마자화된 그래프 사용
-                G = self.G_roman
+            if hasattr(self, 'G_original') and self.G_original is not None:
+                G = self.G_original.copy()
             elif hasattr(self, 'G') and self.G is not None:
-                # 일반 그래프 사용
-                G = self.G
+                G = self.G.copy()
             elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'graph'):
-                # 애널라이저의 그래프 사용
-                G = self.analyzer.graph
+                G = self.analyzer.graph.copy()
             elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'G'):
-                # 애널라이저의 G 사용
-                G = self.analyzer.G
+                G = self.analyzer.G.copy()
             
             # 그래프가 없는 경우
             if G is None or G.number_of_nodes() == 0:
@@ -370,6 +459,34 @@ class NetworkVisualizer:
                 fig.add_annotation(text="네트워크 데이터가 없습니다", showarrow=False, font=dict(size=20))
                 fig.update_layout(width=width, height=height)
                 return fig
+                
+            # 특정 노드 중심 서브그래프 생성 (focus_node가 지정된 경우)
+            original_G = G.copy()  # 원본 그래프 저장
+            if focus_node is not None and focus_node in G.nodes():
+                # 중심 노드 포함 서브그래프 생성
+                nodes_to_keep = {focus_node}
+                
+                # neighbor_depth까지의 이웃 노드 추가
+                current_neighbors = {focus_node}
+                for i in range(neighbor_depth):
+                    new_neighbors = set()
+                    for node in current_neighbors:
+                        # 진입 이웃 (들어오는 엣지)
+                        new_neighbors.update(G.predecessors(node))
+                        # 진출 이웃 (나가는 엣지)
+                        new_neighbors.update(G.successors(node))
+                    
+                    # 새 이웃 추가
+                    nodes_to_keep.update(new_neighbors)
+                    current_neighbors = new_neighbors
+                
+                # 서브그래프 생성
+                G = G.subgraph(nodes_to_keep).copy()
+                
+                # 서브그래프가 비어있으면 원본 사용
+                if G.number_of_nodes() == 0:
+                    G = original_G.copy()
+                    focus_node = None  # 포커스 노드 초기화
             
             # 레이아웃 알고리즘 적용
             pos = None
@@ -418,6 +535,11 @@ class NetworkVisualizer:
                     
                     # 크기 범위 제한
                     size = max(10, min(size, 50))
+                    
+                    # 포커스 노드이면 크기 키우기
+                    if focus_node is not None and node == focus_node:
+                        size = 70  # 중심 노드 강조
+                        
                     node_size.append(size)
                 except Exception as e:
                     logger.warning(f"노드 {node} 크기 계산 중 오류: {str(e)}")
@@ -465,18 +587,23 @@ class NetworkVisualizer:
                             color_idx = len(comm_color_map) % len(color_palette)
                             comm_color_map[comm_id] = color_palette[color_idx]
                             
-                        node_color.append(comm_color_map[comm_id])
+                        # 기본 색상
+                        color = comm_color_map[comm_id]
+                        
+                        # 포커스 노드이면 다른 색상 사용
+                        if focus_node is not None and node == focus_node:
+                            color = 'red'  # 중심 노드 강조
+                            
+                        node_color.append(color)
                     else:
                         # 커뮤니티 정보가 없으면 기본 색상 사용
-                        node_color.append('#1f77b4')
+                        if focus_node is not None and node == focus_node:
+                            node_color.append('red')  # 중심 노드 강조
+                        else:
+                            node_color.append('#1f77b4')
                 except Exception as e:
                     logger.warning(f"노드 {node} 색상 설정 중 오류: {str(e)}")
                     node_color.append('#cccccc')
-            
-            # 엣지 데이터 준비
-            edge_x = []
-            edge_y = []
-            edge_info = []
             
             # 가중치별 엣지 그룹화 (각 가중치별로 별도의 Scatter를 만들기 위함)
             edge_groups = {}  # 가중치별 엣지 정보 저장 (weight -> [x, y, info])
@@ -486,10 +613,6 @@ class NetworkVisualizer:
                 try:
                     x0, y0 = pos[u]
                     x1, y1 = pos[v]
-                    
-                    # 엣지 정보
-                    source_name = self._get_original_name(u) if hasattr(self, '_get_original_name') else str(u)
-                    target_name = self._get_original_name(v) if hasattr(self, '_get_original_name') else str(v)
                     
                     # 엣지 두께 (가중치 기반)
                     weight = 1
@@ -506,8 +629,12 @@ class NetworkVisualizer:
                     thickness = max(1, min(1 + weight * 0.5, 5))
                     thickness_rounded = round(thickness * 2) / 2  # 0.5 단위로 반올림
                     
+                    # 포커스 노드와 연결된 엣지는 두껍게
+                    if focus_node is not None and (u == focus_node or v == focus_node):
+                        thickness_rounded = 3.0  # 중심 노드의 엣지 강조
+                    
                     # 정보 텍스트
-                    info = f"{source_name} → {target_name}"
+                    info = f"{u} → {v}"
                     if weight > 1:
                         info += f"<br>가중치: {weight}"
                     
@@ -516,13 +643,18 @@ class NetworkVisualizer:
                         edge_groups[thickness_rounded] = {
                             'x': [],
                             'y': [],
-                            'info': []
+                            'info': [],
+                            'focus': []  # 중심 노드 연결 여부
                         }
+                    
+                    # 중심 노드 연결 여부
+                    is_focus = focus_node is not None and (u == focus_node or v == focus_node)
                     
                     # 해당 가중치 그룹에 좌표와 정보 추가
                     edge_groups[thickness_rounded]['x'].extend([x0, x1, None])
                     edge_groups[thickness_rounded]['y'].extend([y0, y1, None])
                     edge_groups[thickness_rounded]['info'].extend([info, info, None])
+                    edge_groups[thickness_rounded]['focus'].extend([is_focus, is_focus, False])
                     
                 except Exception as e:
                     # 엣지 그리기 오류 무시
@@ -532,11 +664,16 @@ class NetworkVisualizer:
             # 엣지 트레이스 (가중치별로 별도 생성)
             edge_traces = []
             for thickness, group in edge_groups.items():
+                # 중심 노드 연결 엣지는 다른 색상 사용
+                edge_color = 'rgba(150, 150, 150, 0.6)'
+                if focus_node is not None and any(group['focus']):
+                    edge_color = 'rgba(255, 0, 0, 0.6)'  # 중심 노드 연결 엣지는 빨간색
+                
                 # 해당 두께의 엣지 Scatter 생성
                 edge_trace = go.Scatter(
                     x=group['x'], 
                     y=group['y'],
-                    line=dict(width=thickness, color='rgba(150, 150, 150, 0.6)'),
+                    line=dict(width=thickness, color=edge_color),
                     hoverinfo='text',
                     text=group['info'],
                     mode='lines',
@@ -558,6 +695,7 @@ class NetworkVisualizer:
             node_text = []
             node_hover = []
             node_labels = []
+            node_ids = []  # 클릭 이벤트 위한 ID 저장
             
             # 노드 데이터 설정
             for node in G.nodes():
@@ -567,15 +705,11 @@ class NetworkVisualizer:
                     node_x.append(x)
                     node_y.append(y)
                     
-                    # 노드 이름 설정
-                    if hasattr(self, '_get_original_name'):
-                        # 원래 한글 이름 사용
-                        node_label = self._get_original_name(node)
-                    elif 'label' in G.nodes[node]:
-                        node_label = G.nodes[node]['label']
-                    else:
-                        node_label = str(node)
+                    # 노드 ID 저장 (클릭 이벤트용)
+                    node_ids.append(node)
                     
+                    # 노드 이름 설정 (실제 학생 이름 사용)
+                    node_label = str(node)
                     node_labels.append(node_label)
                     
                     # 중심성 정보 가져오기
@@ -617,6 +751,15 @@ class NetworkVisualizer:
                     if communities and node in communities:
                         comm_id = communities[node]
                         hover_text += f"<br>그룹: {comm_id}"
+                        
+                    # 중심 노드 표시
+                    if focus_node is not None and node == focus_node:
+                        hover_text += "<br><b>중심 노드</b>"
+                        # 원래 이름 추가 (이미 원본 이름 사용 중이므로 필요 없음)
+                    elif focus_node is not None:
+                        hover_text += "<br>클릭: 이 학생 중심 보기"
+                    else:
+                        hover_text += "<br>클릭: 이 학생 중심 보기"
                     
                     node_hover.append(hover_text)
                     node_text.append(node_label)
@@ -627,6 +770,7 @@ class NetworkVisualizer:
                     node_text.append(str(node))
                     node_hover.append(f"오류: {str(e)}")
                     node_labels.append(str(node))
+                    node_ids.append(str(node))
             
             # 노드 트레이스
             node_trace = go.Scatter(
@@ -648,14 +792,21 @@ class NetworkVisualizer:
                     size=node_size,
                     line=dict(color='black', width=1),
                     opacity=0.9
-                )
+                ),
+                ids=node_ids,  # 클릭 이벤트용 ID
+                customdata=node_ids  # 클릭 이벤트에서 접근할 데이터
             )
+            
+            # 그래프 제목 설정
+            title = '<b>학급 관계 네트워크</b>'
+            if focus_node is not None:
+                title = f'<b>{focus_node} 중심 관계 네트워크</b>'
             
             # 그래프 레이아웃 설정
             fig = go.Figure(
                 data=[*edge_traces, node_trace],
                 layout=go.Layout(
-                    title='<b>학급 관계 네트워크</b>',
+                    title=title,
                     titlefont=dict(size=18, family="'Noto Sans KR', sans-serif"),
                     showlegend=False,  # 범례 숨김
                     hovermode='closest',
@@ -666,7 +817,8 @@ class NetworkVisualizer:
                     width=width,
                     height=height,
                     plot_bgcolor='rgba(248,249,250,1)',  # 배경색
-                    paper_bgcolor='rgba(248,249,250,1)'  # 주변 배경색
+                    paper_bgcolor='rgba(248,249,250,1)',  # 주변 배경색
+                    clickmode='event+select'  # 클릭 이벤트 활성화
                 )
             )
             
@@ -675,6 +827,25 @@ class NetworkVisualizer:
                 template="plotly",
                 margin=dict(l=10, r=10, t=50, b=10)
             )
+            
+            # 포커스 노드 있는 경우 주석 추가
+            if focus_node is not None:
+                fig.add_annotation(
+                    text=f"중심 학생: {focus_node}",
+                    xref="paper", yref="paper",
+                    x=0.5, y=1.05,
+                    showarrow=False,
+                    font=dict(size=14, color="red")
+                )
+                
+                # 전체 보기 버튼 추가
+                fig.add_annotation(
+                    text="<a href='javascript:void(0);' onclick='resetFocus()'>전체 네트워크 보기</a>",
+                    xref="paper", yref="paper",
+                    x=0.95, y=1.05,
+                    showarrow=False,
+                    font=dict(size=12, color="blue")
+                )
             
             # 인터랙티브 기능 추가
             fig.update_layout(
@@ -817,7 +988,7 @@ class NetworkVisualizer:
                 
                 for node, comm in community_data.items():
                     # 로마자화된 이름으로 변환
-                    roman_node = romanize_korean(str(node))
+                    roman_node = self._get_original_name(str(node))
                     if roman_node in G.nodes():
                         color_map[roman_node] = community_colors[comm]
             
@@ -1072,7 +1243,7 @@ class NetworkVisualizer:
             name_mapping = {}
             for name in df['name']:
                 if re.search(r'[가-힣]', name):  # 한글이 포함된 경우만 변환
-                    name_mapping[name] = romanize_korean(name)
+                    name_mapping[name] = self._get_original_name(name)
                 else:
                     name_mapping[name] = name
             
@@ -1247,11 +1418,4 @@ class NetworkVisualizer:
         if not self.metrics:
             # 중심성 지표가 계산되지 않았다면 계산
             self.metrics = self.analyzer.metrics
-        return self.metrics
-
-    # 원본 이름 가져오기 위한 도우미 메서드 추가
-    def _get_original_name(self, node_id):
-        """로마자화된 노드 ID에서 원래 이름 조회"""
-        if node_id in self.original_names:
-            return self.original_names[node_id]
-        return str(node_id) 
+        return self.metrics 
