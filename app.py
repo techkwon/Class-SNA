@@ -342,7 +342,7 @@ def upload_page():
                     
                     # 분석 결과 페이지로 전환
                     st.session_state.page = 'analysis'
-                    st.experimental_rerun()
+                    st.rerun()
                     
                 except Exception as e:
                     import traceback
@@ -357,7 +357,7 @@ def upload_page():
         # 세션 초기화 버튼
         if st.button("🗑️ 초기화", use_container_width=True, key="reset_button"):
             reset_session()
-            st.experimental_rerun()
+            st.rerun()
     
     # 메인 컨텐츠
     st.markdown("## 데이터 업로드")
@@ -411,7 +411,7 @@ def upload_page():
                             
                             # 분석 결과 페이지로 전환
                             st.session_state.page = 'analysis'
-                            st.experimental_rerun()
+                            st.rerun()
                             
                         except Exception as e:
                             import traceback
@@ -475,7 +475,7 @@ def main():
             show_analysis_results()
         else:
             st.session_state.page = 'upload'
-            st.experimental_rerun()
+            st.rerun()
             
         # 푸터
         st.markdown("""
@@ -499,7 +499,7 @@ def main():
         if st.button("앱 초기화"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
-            st.experimental_rerun()
+            st.rerun()
 
 # 분석 결과 표시 함수
 def show_analysis_results():
@@ -533,11 +533,17 @@ def show_analysis_results():
                         del st.session_state[key]
                 # 페이지 상태 변경
                 st.session_state.page = 'upload'
-                st.experimental_rerun()
+                st.rerun()
             return
 
         # 분석기 가져오기
         analyzer = network_analyzer
+        
+        # 네트워크 데이터 가져오기
+        network_data = st.session_state.get('network_data')
+        if not network_data:
+            st.error("네트워크 데이터가 없습니다.")
+            return
 
         # 시각화 객체 생성 또는 가져오기
         if 'visualizer' not in st.session_state or not st.session_state.visualizer:
@@ -562,16 +568,16 @@ def show_analysis_results():
 
         # 상단 메뉴 탭
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📊 기본 분석", 
+            "📊 학생 분석", 
             "🌐 대화형 네트워크", 
             "📈 중심성 분석", 
             "👥 그룹 분석",
             "⚠️ 고립 학생"
         ])
 
-        # 탭 1: 기본 분석
+        # 탭 1: 학생 분석 (기본 분석 대체)
         with tab1:
-            report_generator.show_basic_analysis()
+            report_generator.show_student_analysis(network_data)
 
         # 탭 2: 대화형 네트워크 시각화 (Plotly 사용)
         with tab2:
@@ -579,15 +585,15 @@ def show_analysis_results():
 
         # 탭 3: 중심성 분석
         with tab3:
-            report_generator.show_centrality_analysis()
+            report_generator.show_centrality_analysis(network_data)
 
         # 탭 4: 그룹 분석
         with tab4:
-            report_generator.show_community_analysis()
+            report_generator.show_communities(network_data)
 
         # 탭 5: 고립 학생 분석
         with tab5:
-            report_generator.show_isolated_students()
+            report_generator.show_isolated_students(network_data)
 
         # CSV 내보내기 버튼
         st.sidebar.header("데이터 내보내기")
