@@ -270,7 +270,6 @@ class NetworkVisualizer:
             self.G = analyzer.graph.copy()
         else:
             # 어떤 속성도 없으면 빈 그래프 생성
-            import networkx as nx
             self.G = nx.DiGraph()
             logger.warning("분석기에서 그래프를 찾을 수 없어 빈 그래프를 생성합니다.")
         
