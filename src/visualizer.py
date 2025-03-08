@@ -262,7 +262,17 @@ class NetworkVisualizer:
     def __init__(self, analyzer):
         """NetworkAnalyzer 객체를 받아 초기화"""
         self.analyzer = analyzer
-        self.G = analyzer.G.copy()
+        
+        # analyzer.G 또는 analyzer.graph 중 사용 가능한 것 사용
+        if hasattr(analyzer, 'G') and analyzer.G is not None:
+            self.G = analyzer.G.copy()
+        elif hasattr(analyzer, 'graph') and analyzer.graph is not None:
+            self.G = analyzer.graph.copy()
+        else:
+            # 어떤 속성도 없으면 빈 그래프 생성
+            import networkx as nx
+            self.G = nx.DiGraph()
+            logger.warning("분석기에서 그래프를 찾을 수 없어 빈 그래프를 생성합니다.")
         
         # 항상 로마자 이름 사용
         self.has_korean_font = False

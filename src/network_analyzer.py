@@ -38,7 +38,8 @@ class NetworkAnalyzer:
         
         # 기타 데이터 저장
         self.question_types = network_data.get("question_types", {})
-        self.graph = None
+        self.graph = None  # 네트워크 그래프 (networkx 객체)
+        self.G = None      # G 별칭 추가 (visualizer 호환용)
         self.metrics = {}
         self.communities = None
         
@@ -136,7 +137,10 @@ class NetworkAnalyzer:
                     logger.warning(f"엣지 추가 중 오류 발생: {str(e)}, 행: {row}")
                     continue
             
-            self.graph = G
+            # 그래프 저장 (두 이름 모두 사용)
+            self.graph = G  # 기존 네이밍
+            self.G = G      # visualizer 호환용 별칭
+            
             logger.info(f"그래프 생성 완료: 노드 {G.number_of_nodes()}개, 엣지 {G.number_of_edges()}개")
             
         except Exception as e:
