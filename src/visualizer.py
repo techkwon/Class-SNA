@@ -568,13 +568,36 @@ class NetworkVisualizer:
             
             # 정규화 함수 정의
             def normalize(values, min_size=10, max_size=30):
+                """값을 지정된 범위로 정규화합니다 (문자열 처리 포함)"""
                 if not values:
                     return {}
-                min_val, max_val = min(values), max(values)
+                
+                # 문자열을 숫자로 변환하여 정규화 처리
+                numeric_values = {}
+                for k, v in values.items():
+                    try:
+                        # 문자열이나 다른 타입을 float로 변환 시도
+                        numeric_values[k] = float(v)
+                    except (ValueError, TypeError):
+                        # 변환 실패 시 기본값 0 사용
+                        numeric_values[k] = 0.0
+                        logging.warning(f"비숫자 값을 0으로 변환: 키={k}, 값={v}")
+                
+                # 빈 딕셔너리 체크
+                if not numeric_values:
+                    return {}
+                
+                # 최소값과 최대값 계산
+                min_val = min(numeric_values.values())
+                max_val = max(numeric_values.values())
+                
+                # 모든 값이 동일한 경우
                 if min_val == max_val:
-                    return {k: (max_size + min_size) / 2 for k in values.keys()}
+                    return {k: (max_size + min_size) / 2 for k in numeric_values.keys()}
+                
+                # 정규화 계산
                 return {k: min_size + (v - min_val) * (max_size - min_size) / (max_val - min_val) 
-                        for k, v in values.items()}
+                        for k, v in numeric_values.items()}
                     
             # 기본 중심성 (크기, 색상용)
             in_degree = nx.in_degree_centrality(G)
