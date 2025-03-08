@@ -16,6 +16,7 @@ import platform
 import re
 import warnings
 import subprocess
+import json
 
 # 모든 matplotlib, plotly 경고 완전히 비활성화
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -173,104 +174,31 @@ def set_korean_font():
 
 # PyVis 네트워크에 한글 폰트 적용 (폰트 없이도 작동하도록 개선)
 def apply_korean_font_to_pyvis(net):
-    """PyVis 네트워크에 한글 폰트 설정을 적용합니다"""
-    try:
-        # 한글 폰트를 지원하는 웹 폰트 추가 (Google Fonts CDN 사용)
-        font_css = """
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
-        """
-        
-        # 툴팁 스타일 개선
-        tooltip_css = """
-        .vis-tooltip {
-            position: absolute;
-            visibility: hidden;
-            padding: 10px 12px;
-            white-space: pre-wrap !important;
-            font-family: 'Noto Sans KR', sans-serif;
-            font-size: 14px;
-            color: black;
-            background-color: rgba(255, 255, 255, 0.95);
-            border-radius: 6px;
-            border: 1px solid #cccccc;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-            pointer-events: none;
-            z-index: 10;
-            max-width: 300px;
-            transition: all 0.2s ease;
-        }
-        """
-        
-        # 노드 스타일 개선
-        node_css = """
-        .vis-node {
-            font-family: 'Noto Sans KR', sans-serif;
-        }
-        """
-        
-        # HTML에 웹 폰트를 추가하는 코드 삽입
-        html = net.html
-        
-        # 폰트 및 CSS 스타일 추가
-        html = html.replace('<head>', f'<head>\n<style>{font_css}{tooltip_css}{node_css}</style>')
-        
-        # 툴팁 개선을 위한 JavaScript 추가
-        tooltip_js = """
-        <script>
-        // 툴팁 태그 처리 함수 정의
-        function formatTooltip(tooltip) {
-            if (tooltip) {
-                // \\n을 <br>로 변환하여 줄바꿈 처리
-                tooltip = tooltip.replace(/\\n/g, "<br>");
-            }
-            return tooltip;
-        }
-        
-        // 문서가 로드되면 실행
-        document.addEventListener('DOMContentLoaded', function() {
-            // vis-network 요소가 초기화될 때까지 기다림
-            var checkExist = setInterval(function() {
-                if (document.querySelector('.vis-network') && window.network) {
-                    clearInterval(checkExist);
-                    
-                    // 툴팁 표시 방식 개선
-                    network.on("hoverNode", function(params) {
-                        var nodeId = params.node;
-                        var node = network.body.nodes[nodeId];
-                        if (node && node.options && node.options.title) {
-                            var tooltip = formatTooltip(node.options.title);
-                            var tooltipDiv = document.querySelector('.vis-tooltip');
-                            
-                            if (tooltipDiv) {
-                                tooltipDiv.innerHTML = tooltip;
-                                tooltipDiv.style.visibility = 'visible';
-                            }
-                        }
-                    });
-                    
-                    // 마우스가 노드에서 벗어날 때 툴팁 숨기기
-                    network.on("blurNode", function() {
-                        var tooltipDiv = document.querySelector('.vis-tooltip');
-                        if (tooltipDiv) {
-                            tooltipDiv.style.visibility = 'hidden';
-                        }
-                    });
-                }
-            }, 100);
-        });
-        </script>
-        """
-        
-        # JavaScript 코드 삽입
-        html = html.replace('</body>', f'{tooltip_js}</body>')
-        
-        # 수정된 HTML 반환
-        net.html = html
-        return net
-        
-    except Exception as e:
-        logger.error(f"PyVis 네트워크에 한글 폰트 적용 중 오류: {str(e)}")
-        return net
+    """PyVis 네트워크에 한글 폰트 적용"""
+    # HTML <style> 요소 대신 직접 CSS를 주입하는 방식으로 변경
+    # 이전 코드가 항상 작동하지 않는 경우가 있었음
+    custom_css = """
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic&family=Noto+Sans+KR&display=swap');
+      
+      .node text {
+        font-family: 'Noto Sans KR', 'Nanum Gothic', sans-serif !important;
+      }
+      
+      .tooltip {
+        font-family: 'Noto Sans KR', 'Nanum Gothic', sans-serif !important;
+      }
+    </style>
+    """
+    
+    # 기존 options 딕셔너리에 직접 덮어쓰기
+    net.html = net.html.replace("<head>", f"<head>\n{custom_css}")
+    
+    # 종합적인 수정사항 - 네트워크 자체의 옵션도 조정
+    net.options.physics.enabled = True
+    net.options.physics.solver = "forceAtlas2Based"
+    
+    return net
 
 # 한글 로마자 변환 함수 - 성능 개선
 SURNAMES = {
@@ -291,43 +219,42 @@ SURNAMES = {
 }
 
 def romanize_korean(text):
-    """한글 이름을 로마자로 변환"""
-    if not text:
+    """한글 텍스트를 로마자로 변환하는 함수
+    
+    내부 처리용으로만 사용하고, 표시할 때는 원래 한글을 사용
+    """
+    if not text or not isinstance(text, str):
         return "Unknown"
         
-    # 정수 또는 부동소수점 처리
-    if isinstance(text, (int, float)):
-        return str(text)
-    
-    # 이미 알파벳인 경우 그대로 반환
-    if re.match(r'^[A-Za-z0-9_]+$', str(text)):
-        return str(text)
-    
-    # 단일 문자인 경우 학생 번호로 처리
-    if len(str(text)) == 1 and re.match(r'[가-힣]', str(text)):
-        hash_val = hash(text) % 1000
-        return f"Student-{hash_val}"
-    
-    try:
-        # 성씨 추출 (첫 글자)
-        surname = text[0]
-        given_name = text[1:]
+    # 한글이 아닌 경우 그대로 반환
+    if not any(c for c in text if ord('가') <= ord(c) <= ord('힣')):
+        return text
         
-        # 성씨 변환
-        if surname in SURNAMES:
-            romanized_surname = SURNAMES[surname]
+    # 간단한 로마자 변환 (더 복잡한 규칙이 필요하면 hangul-romanize 등의 라이브러리 사용 권장)
+    korean_to_roman = {
+        '가': 'ga', '나': 'na', '다': 'da', '라': 'ra', '마': 'ma', '바': 'ba', '사': 'sa', 
+        '아': 'a', '자': 'ja', '차': 'cha', '카': 'ka', '타': 'ta', '파': 'pa', '하': 'ha',
+        '김': 'Kim', '이': 'Lee', '박': 'Park', '최': 'Choi', '정': 'Jung', '강': 'Kang',
+        '조': 'Jo', '윤': 'Yoon', '장': 'Jang', '임': 'Lim', '한': 'Han', '오': 'Oh',
+        '서': 'Seo', '신': 'Shin', '권': 'Kwon', '황': 'Hwang', '안': 'Ahn', '송': 'Song',
+        '유': 'Yoo', '홍': 'Hong', '전': 'Jeon', '고': 'Go', '문': 'Moon', '양': 'Yang',
+        '손': 'Son', '배': 'Bae', '조': 'Cho', '백': 'Baek', '허': 'Heo', '남': 'Nam'
+    }
+    
+    result = ""
+    for char in text:
+        if '가' <= char <= '힣':
+            if char in korean_to_roman:
+                result += korean_to_roman[char]
+            else:
+                # 매핑되지 않은 한글 문자는 'x'로 대체
+                result += 'x'
         else:
-            # 알 수 없는 성씨
-            hash_val = hash(text) % 1000
-            return f"Student-{hash_val}"
-        
-        # 이름은 그대로 유지 (이름 글자별 변환은 복잡함)
-        # 실제로는 각 글자별로 발음에 따라 변환해야 하지만, 여기서는 단순화
-        
-        return f"{romanized_surname} {given_name}"
-    except:
-        # 변환 실패 시
-        return f"Student-{hash(str(text)) % 1000}"
+            result += char
+    
+    # 로마자 변환 결과 로깅
+    logging.debug(f"로마자 변환: {text} -> {result}")
+    return result
 
 class NetworkVisualizer:
     """네트워크 그래프 시각화 클래스"""
@@ -335,55 +262,71 @@ class NetworkVisualizer:
     def __init__(self, analyzer):
         """NetworkAnalyzer 객체를 받아 초기화"""
         self.analyzer = analyzer
-        self.graph = analyzer.graph
+        self.G = analyzer.G.copy()
         
-        # 한글 폰트 설정 및 확인
-        self.has_korean_font = False  # 기본값: 한글 폰트 없음, 로마자 사용
+        # 항상 로마자 이름 사용
+        self.has_korean_font = False
+        
+        # 원래 이름 매핑 저장
+        self.original_names = {}
+        for node in self.G.nodes():
+            # 노드가 문자열이 아닌 경우 처리
+            if isinstance(node, str):
+                # 한글 이름 저장
+                self.original_names[romanize_korean(node)] = node
+            else:
+                self.original_names[str(node)] = str(node)
+        
+        # 한글 폰트 확인 (결과에 상관없이 로마자화된 이름 사용)
         self._check_korean_font()
         
-        # 노드 이름 매핑 (원래 이름 -> 로마자화된 이름)
-        self.name_mapping = {}
-        if not self.has_korean_font:
-            for node in self.graph.nodes():
-                self.name_mapping[node] = romanize_korean(node)
+        # 그래프 복사본 생성 (로마자 이름 사용)
+        self.G_roman = nx.DiGraph()
+        
+        # 노드 복사 (이름 로마자화)
+        for node, data in self.G.nodes(data=True):
+            # 노드 이름 로마자화
+            roman_name = romanize_korean(str(node))
+            self.G_roman.add_node(roman_name, **data)
+            
+        # 엣지 복사 (이름 로마자화)
+        for u, v, data in self.G.edges(data=True):
+            u_roman = romanize_korean(str(u))
+            v_roman = romanize_korean(str(v))
+            self.G_roman.add_edge(u_roman, v_roman, **data)
+            
+        # 로마자 이름 매핑 저장
+        logging.info(f"로마자 이름 매핑 생성 완료: {len(self.original_names)}개")
         
         self.communities = analyzer.communities
         self.metrics = analyzer.metrics
     
     def _check_korean_font(self):
         """한글 폰트 사용 가능 여부 확인"""
-        # 전역 HAS_KOREAN_FONT 변수가 정의되어 있으면 사용
-        if 'HAS_KOREAN_FONT' in globals():
-            self.has_korean_font = globals()['HAS_KOREAN_FONT']
-        else:
-            # 기본값: 항상 로마자 사용 (한글 폰트 무시)
-            self.has_korean_font = False
+        # 글로벌 변수 사용
+        global HAS_KOREAN_FONT
         
-        return self.has_korean_font
-    
+        # 항상 False로 설정 (로마자 사용)
+        self.has_korean_font = False
+        
     def _get_display_label(self, node_name, use_romanized=True):
-        """노드 레이블 표시를 위한 방법 결정 (한글 폰트 문제 대응)"""
-        if node_name is None:
+        """노드 표시 레이블 생성
+        
+        내부 처리용으로는 로마자화된 이름을 사용하고,
+        사용자 표시용으로는 원래 한글 이름을 사용합니다.
+        """
+        if not node_name:
             return "Unknown"
             
-        # 노드가 ID인 경우 원래 이름으로 변환
-        if hasattr(self.analyzer, 'name_mapping') and str(node_name) in self.analyzer.name_mapping:
-            original_name = self.analyzer.name_mapping[str(node_name)]
-        else:
-            original_name = str(node_name)
-            
-        # 로마자 변환 여부 결정
-        if use_romanized:
-            # 로마자 변환 수행
-            if hasattr(self.analyzer, 'romanized_mapping') and original_name in self.analyzer.romanized_mapping:
-                # 이미 저장된 로마자 매핑 사용
-                return self.analyzer.romanized_mapping[original_name]
-            else:
-                # 직접 변환
-                return romanize_korean(original_name)
-        else:
-            # 원본 이름 그대로 사용
-            return original_name
+        # 로마자화된 이름
+        romanized_name = romanize_korean(str(node_name))
+        
+        # 항상 원래 이름 반환 (한글)
+        if romanized_name in self.original_names:
+            return self.original_names[romanized_name]
+        
+        # 없으면 원래 이름 그대로 반환
+        return str(node_name)
     
     def create_plotly_network(self, layout="fruchterman", width=900, height=700):
         """Plotly를 사용한 네트워크 그래프 생성"""
@@ -586,229 +529,278 @@ class NetworkVisualizer:
             return fig
     
     def create_pyvis_network(self, height="600px", width="100%", layout="fruchterman"):
-        """PyVis 라이브러리를 사용한 대화형 네트워크 생성"""
+        """PyVis 네트워크 시각화 생성
+        
+        Arguments:
+            height (str): 네트워크 높이 (기본값: 600px)
+            width (str): 네트워크 너비 (기본값: 100%)
+            layout (str): 레이아웃 알고리즘 (기본값: fruchterman)
+            
+        Returns:
+            pyvis.network.Network: 시각화된 네트워크 객체
+        """
         try:
-            # 그래프 존재 확인
-            if not hasattr(self, 'analyzer') or not self.analyzer or not hasattr(self.analyzer, 'graph'):
-                return "<div>데이터가 없습니다</div>"
-                
-            G = self.analyzer.graph
+            # 로마자 이름으로 변환된 그래프 사용
+            G = self.G_roman.copy()
             
-            if G is None or G.number_of_nodes() == 0:
-                return "<div>네트워크 데이터가 없습니다</div>"
-                
-            # PyVis 네트워크 객체 생성 - 물리 시뮬레이션 활성화
-            net = Network(
-                height=height, 
-                width=width,
-                directed=True,
-                bgcolor="#ffffff",  # 배경색: 흰색
-                font_color="#333333"  # 글자색: 어두운 회색
-            )
+            # 빈 그래프 확인
+            if len(G.nodes()) == 0:
+                logging.error("빈 그래프로 PyVis 네트워크를 생성할 수 없습니다.")
+                return None
             
-            # 물리 시뮬레이션 설정 (노드 간 거리와 반발력 조정)
-            net.barnes_hut(
-                gravity=-10000,  # 중력(작을수록 노드가 더 멀리 떨어짐)
-                central_gravity=0.8,  # 중앙 중력
-                spring_length=200,  # 스프링 길이
-                spring_strength=0.05,  # 스프링 강도(작을수록 노드가 멀리 떨어짐)
-                damping=0.9  # 감쇠(클수록 안정화가 빠름)
-            )
-            
-            # 타이틀 설정
-            net.set_options("""
-            {
-              "interaction": {
-                "hover": true,
-                "tooltipDelay": 50
-              },
-              "physics": {
-                "stabilization": {
-                  "iterations": 50,
-                  "updateInterval": 25
-                }
-              }
-            }
-            """)
-            
-            # 선명한 색상 팔레트 (색약자도 구분 가능하도록)
-            vibrant_colors = {
-                0: "#1f77b4",  # 파랑
-                1: "#ff7f0e",  # 주황
-                2: "#2ca02c",  # 초록
-                3: "#d62728",  # 빨강
-                4: "#9467bd",  # 보라
-                5: "#8c564b",  # 갈색
-                6: "#e377c2",  # 분홍
-                7: "#7f7f7f",  # 회색
-                8: "#bcbd22",  # 연노랑
-                9: "#17becf"   # 청록
-            }
-            
-            # 커뮤니티 정보 가져오기 (안전하게)
-            try:
-                communities = self.analyzer.get_communities()
-            except Exception as e:
-                logger.warning(f"커뮤니티 정보를 가져오는 중 오류: {str(e)}")
-                communities = {}
-            
-            # 노드 추가 (학생)
+            # 정점 레이블 매핑 (원래 한글 이름으로 표시)
+            node_labels = {}
             for node in G.nodes():
-                try:
-                    # 노드 이름 얻기 (ID → 실제 이름)
-                    original_name = self._get_original_name(node)
-                    
-                    # 노드 레이블은 항상 실제 학생 이름으로 표시
-                    node_label = original_name
-                    
-                    # 로마자 변환 이름 (영문 환경용)
-                    roman_name = self._get_display_label(node, use_romanized=True)
-                    
-                    # 노드 크기 (인기도에 따라)
-                    size = 20  # 기본 크기
-                    if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
-                        # in_degree 값이 리스트인 경우 처리
-                        in_degree = self.metrics['in_degree'][node]
-                        
-                        # 타입 처리
-                        if isinstance(in_degree, list):
-                            in_degree = in_degree[0] if in_degree else 0
-                        
-                        # 크기 계산
-                        try:
-                            size = 20 + float(in_degree) * 30
-                            size = min(size, 75)  # 최대 크기 제한
-                        except (ValueError, TypeError):
-                            size = 20
-                    
-                    # 커뮤니티 ID 및 색상 결정
-                    color = "#7f7f7f"  # 기본 회색
-                    community_id = None
-                    
-                    # 커뮤니티 멤버십 확인
-                    if communities:
-                        for comm_id, members in communities.items():
-                            if node in members:
-                                community_id = comm_id
-                                break
-                    
-                    # 색상 할당 로직 (모든 타입 처리)
-                    if community_id is not None:
-                        # 1. 직접 vibrant_colors에서 찾기
-                        if community_id in vibrant_colors:
-                            color = vibrant_colors[community_id]
-                        else:
-                            # 2. 리스트인 경우
-                            if isinstance(community_id, list):
-                                comm_id = community_id[0] if community_id else 0
-                            else:
-                                comm_id = community_id
-                                
-                            # 3. 정수 변환 시도
-                            try:
-                                # 정수로 변환 후 안전하게 모듈로 연산
-                                color_idx = int(str(comm_id).strip()) if not isinstance(comm_id, int) else comm_id
-                                color_idx = color_idx % len(vibrant_colors)
-                                color = vibrant_colors[color_idx]
-                            except (ValueError, TypeError):
-                                # 변환 실패 시 해시 기반 색상 할당
-                                hash_val = hash(str(comm_id)) % len(vibrant_colors)
-                                color = vibrant_colors[hash_val]
-                    
-                    # 툴팁 생성 (모든 값의 타입 안전하게 처리)
-                    tooltip = f"이름: {original_name}"
-                    
-                    # 중심성 지표 처리 함수
-                    def format_metric(metric_name, node_id):
-                        if metric_name in self.metrics and node_id in self.metrics[metric_name]:
-                            value = self.metrics[metric_name][node_id]
-                            
-                            # 리스트 처리
-                            if isinstance(value, list):
-                                value = value[0] if value else 0
-                                
-                            # 숫자 형식화
-                            try:
-                                return f"{metric_name}: {float(value):.3f}"
-                            except (ValueError, TypeError):
-                                return f"{metric_name}: {value}"
-                        return ""
-                    
-                    # 각 중심성 지표 추가
-                    in_degree_metric = format_metric("인기도", node)
-                    if in_degree_metric:
-                        tooltip += f"\n{in_degree_metric}"
-                        
-                    betweenness_metric = format_metric("매개 중심성", node)
-                    if betweenness_metric:
-                        tooltip += f"\n{betweenness_metric}"
-                    
-                    # 커뮤니티 정보 추가
-                    if community_id is not None:
-                        tooltip += f"\n그룹: {community_id}"
-                    
-                    # 노드 추가 - 학생 실명 표시
-                    net.add_node(
-                        node,                 # 내부 ID 유지 (참조용)
-                        label=node_label,     # 학생 실명으로 표시
-                        title=tooltip,        # 툴팁 정보
-                        size=size,
-                        color=color
-                    )
-                except Exception as e:
-                    logger.warning(f"노드 '{node}' 추가 중 오류: {str(e)}")
-                    # 노드 추가 실패 시 기본 노드로 추가
-                    net.add_node(
-                        node,
-                        label=str(node),
-                        size=20,
-                        color="#cccccc"
-                    )
+                # 실제 원래 이름 가져오기
+                node_labels[node] = self._get_original_name(node)
             
-            # 엣지 추가 (관계)
-            for source, target in G.edges():
-                try:
-                    # 엣지 추가
-                    net.add_edge(
-                        source,
-                        target,
-                        arrows="to",  # 화살표 방향
-                        width=1,  # 선 굵기
-                        color="#848484",  # 회색 선
-                        smooth={"enabled": True, "type": "dynamic"}  # 곡선형 엣지
-                    )
-                except Exception as e:
-                    logger.warning(f"엣지 '{source}->{target}' 추가 중 오류: {str(e)}")
+            # 중심성 데이터 가져오기
+            centrality_metrics = self.analyzer.get_centrality_metrics()
             
-            # 레이아웃 설정
-            try:
-                if layout == "circular":
-                    net.set_options('{"layout": {"improvedLayout": true, "hierarchical": {"enabled": false}}}')
-                    # 원형 레이아웃 적용 (PyVis에서는 물리 엔진 끄고 직접 좌표 설정)
-                    pos = nx.circular_layout(G)
-                    for node_id, coords in pos.items():
-                        net.get_node(node_id)['x'] = int(coords[0] * 1000)
-                        net.get_node(node_id)['y'] = int(coords[1] * 1000)
-                        net.get_node(node_id)['physics'] = False
+            # 정규화 함수 정의
+            def normalize(values, min_size=10, max_size=30):
+                if not values:
+                    return {}
+                min_val, max_val = min(values), max(values)
+                if min_val == max_val:
+                    return {k: (max_size + min_size) / 2 for k in values.keys()}
+                return {k: min_size + (v - min_val) * (max_size - min_size) / (max_val - min_val) 
+                        for k, v in values.items()}
+                    
+            # 기본 중심성 (크기, 색상용)
+            in_degree = nx.in_degree_centrality(G)
+            bet_cent = nx.betweenness_centrality(G)
+            
+            # 정규화
+            node_sizes = normalize(in_degree)
+            node_colors = normalize(bet_cent, 0, 1)
+            
+            # 커뮤니티 탐지 (색상 다양화용)
+            community_data = self.analyzer.get_communities()
+            
+            # 색상 매핑
+            color_map = {}
+            if community_data:
+                unique_communities = set(community_data.values())
+                colors = plt.cm.tab20(np.linspace(0, 1, len(unique_communities)))
+                community_colors = {comm: f"rgba({int(r*255)},{int(g*255)},{int(b*255)},{a})" 
+                                    for comm, (r, g, b, a) in zip(unique_communities, colors)}
                 
-                elif layout == "kamada":
-                    # 기본 레이아웃 사용하고 초기 위치 Kamada-Kawai로 설정
-                    pos = nx.kamada_kawai_layout(G)
-                    for node_id, coords in pos.items():
-                        net.get_node(node_id)['x'] = int(coords[0] * 1000)
-                        net.get_node(node_id)['y'] = int(coords[1] * 1000)
-            except Exception as e:
-                logger.warning(f"레이아웃 '{layout}' 적용 중 오류: {str(e)}")
+                for node, comm in community_data.items():
+                    # 로마자화된 이름으로 변환
+                    roman_node = romanize_korean(str(node))
+                    if roman_node in G.nodes():
+                        color_map[roman_node] = community_colors[comm]
+            
+            # PyVis 네트워크 초기화
+            net = Network(height=height, width=width, directed=True, notebook=False)
             
             # 한글 폰트 적용
             net = apply_korean_font_to_pyvis(net)
             
-            # 임시 HTML 파일 생성 (Streamlit에서 표시용)
-            return net.html
+            # 레이아웃 설정
+            layout_options = {
+                "fruchterman": {"springLength": 250, "springConstant": 0.01, "damping": 0.09},
+                "force": {"springLength": 100, "springConstant": 0.05, "damping": 0.09, "centralGravity": 0.1},
+                "circular": {}
+            }
             
+            # 레이아웃 설정
+            if layout in layout_options:
+                # 선택된 레이아웃으로 물리 옵션 설정
+                physics_options = layout_options[layout]
+                
+                if layout == "circular":
+                    # 원형 레이아웃은 물리 비활성화하고 원형으로 배치
+                    net.set_options("""
+                    {
+                        "physics": {
+                            "enabled": false
+                        },
+                        "layout": {
+                            "circular": {
+                                "enabled": true
+                            }
+                        }
+                    }
+                    """)
+                else:
+                    # 물리 기반 레이아웃
+                    physics_json = json.dumps(physics_options)
+                    net.set_options(f"""
+                    {{
+                        "physics": {{
+                            "enabled": true,
+                            "forceAtlas2Based": {physics_json},
+                            "solver": "forceAtlas2Based"
+                        }}
+                    }}
+                    """)
+            
+            # 노드 추가
+            for node in G.nodes():
+                # 원래 이름 가져오기
+                original_name = self._get_original_name(node)
+                
+                # 노드 크기 및 색상
+                size = node_sizes.get(node, 15)
+                color = color_map.get(node, "#97C2FC")
+                
+                # 중심성 지표 가져오기
+                in_degree_val = centrality_metrics.get("in_degree", {}).get(original_name, 0)
+                out_degree_val = centrality_metrics.get("out_degree", {}).get(original_name, 0)
+                betweenness_val = centrality_metrics.get("betweenness", {}).get(original_name, 0)
+                
+                # 소수점 둘째자리로 반올림
+                in_degree_val = round(in_degree_val, 2)
+                out_degree_val = round(out_degree_val, 2)
+                betweenness_val = round(betweenness_val, 2)
+                
+                # 네트워크에 화살표가 향하는 수 (인기도)
+                in_arrows = len([u for u, v in G.edges() if v == node])
+                
+                # 네트워크에서 나가는 화살표 수 (활동성)
+                out_arrows = len([u for u, v in G.edges() if u == node])
+                
+                # 툴팁 텍스트 (HTML 태그 제거, 일반 텍스트로 변환)
+                tooltip_text = f"{original_name}\n인기도(In): {in_degree_val}\n활동성(Out): {out_degree_val}\n매개성: {betweenness_val}\n받은 선택: {in_arrows}개\n한 선택: {out_arrows}개"
+                
+                # 정점 추가
+                net.add_node(
+                    node, 
+                    label=original_name,
+                    title=tooltip_text,
+                    size=size, 
+                    color=color
+                )
+            
+            # 엣지 추가
+            for u, v, data in G.edges(data=True):
+                # 가중치 (기본값 1)
+                weight = data.get('weight', 1)
+                
+                # 엣지 설명 
+                title = f"{self._get_original_name(u)} → {self._get_original_name(v)}"
+                if weight > 1:
+                    title += f" (가중치: {weight})"
+                
+                # 엣지 색상 및 폭 설정
+                edge_color = "#848484"  # 기본 회색
+                width = 1 + weight * 0.5  # 가중치에 비례
+                
+                # 엣지 추가
+                net.add_edge(u, v, title=title, width=width, color=edge_color)
+            
+            # 네트워크 옵션 설정
+            net.set_options("""
+            {
+                "nodes": {
+                    "font": {
+                        "size": 16,
+                        "face": "Noto Sans KR"
+                    },
+                    "shape": "dot",
+                    "borderWidth": 2,
+                    "borderWidthSelected": 4
+                },
+                "edges": {
+                    "arrows": {
+                        "to": {
+                            "enabled": true,
+                            "scaleFactor": 0.5
+                        }
+                    },
+                    "color": {
+                        "inherit": false
+                    },
+                    "smooth": {
+                        "enabled": true,
+                        "type": "continuous"
+                    }
+                },
+                "interaction": {
+                    "hover": true,
+                    "navigationButtons": true,
+                    "keyboard": {
+                        "enabled": true
+                    }
+                }
+            }
+            """)
+            
+            # 툴팁이 HTML 태그를 그대로 보여주는 문제 해결
+            # 자바스크립트를 이용해 툴팁 텍스트를 적절히 포맷팅
+            net.html = net.html.replace('</head>', '''
+            <style>
+            div.vis-tooltip {
+                position: absolute;
+                visibility: hidden;
+                padding: 10px;
+                white-space: pre-wrap;
+                font-family: 'Noto Sans KR', sans-serif;
+                font-size: 14px;
+                color: #000000;
+                background-color: #f5f5f5;
+                border-radius: 4px;
+                border: 1px solid #d3d3d3;
+                box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
+                pointer-events: none;
+                z-index: 5;
+            }
+            </style>
+            <script>
+            // 커스텀 툴팁 기능
+            document.addEventListener("DOMContentLoaded", function() {
+                setTimeout(function() {
+                    try {
+                        // 노드 호버 이벤트에 연결
+                        network.on("hoverNode", function(params) {
+                            // 노드의 title 속성 가져오기
+                            var node = network.body.nodes[params.node];
+                            if (node && node.options.title) {
+                                var content = node.options.title;
+                                // 줄바꿈을 <br>로 변환
+                                content = content.replace(/\\n/g, '<br>');
+                                // 툴팁 요소 스타일 지정
+                                var tooltip = document.querySelector('.vis-tooltip');
+                                if (tooltip) {
+                                    tooltip.innerHTML = content;
+                                    tooltip.style.visibility = 'visible';
+                                }
+                            }
+                        });
+                        
+                        // 호버 상태 벗어날 때 툴팁 숨기기
+                        network.on("blurNode", function() {
+                            var tooltip = document.querySelector('.vis-tooltip');
+                            if (tooltip) {
+                                tooltip.style.visibility = 'hidden';
+                            }
+                        });
+                        
+                        // 마우스 움직임에 따라 툴팁 위치 조정
+                        document.addEventListener('mousemove', function(e) {
+                            var tooltip = document.querySelector('.vis-tooltip');
+                            if (tooltip && tooltip.style.visibility === 'visible') {
+                                tooltip.style.top = (e.pageY + 15) + 'px';
+                                tooltip.style.left = (e.pageX + 15) + 'px';
+                            }
+                        });
+                    } catch (err) {
+                        console.error("툴팁 설정 중 오류 발생:", err);
+                    }
+                }, 500); // 네트워크가 로드될 시간을 주기 위한 지연
+            });
+            </script>
+            </head>
+            ''')
+            
+            return net
         except Exception as e:
-            logger.error(f"PyVis 네트워크 생성 중 오류: {str(e)}")
-            return f"<div>네트워크 시각화 생성 중 오류가 발생했습니다: {str(e)}</div>"
+            logging.error(f"PyVis 네트워크 생성 중 오류 발생: {str(e)}")
+            import traceback
+            logging.error(traceback.format_exc())
+            return None
     
     def create_centrality_plot(self, metric="in_degree", top_n=10):
         """중심성 지표 시각화 (내부 처리는 영문, 표시는 한글)"""
@@ -1030,14 +1022,7 @@ class NetworkVisualizer:
 
     # 원본 이름 가져오기 위한 도우미 메서드 추가
     def _get_original_name(self, node_id):
-        """노드 ID에서 원본 학생 이름 가져오기"""
-        # 1. 분석기에 name_mapping이 있는 경우 (ID -> 이름)
-        if hasattr(self.analyzer, 'name_mapping') and str(node_id) in self.analyzer.name_mapping:
-            return self.analyzer.name_mapping[str(node_id)]
-        
-        # 2. 세션 상태에 name_mapping이 있는 경우
-        elif 'name_mapping' in st.session_state and str(node_id) in st.session_state.name_mapping:
-            return st.session_state.name_mapping[str(node_id)]
-        
-        # 3. 그 외의 경우 원본 ID 반환
+        """로마자화된 노드 ID에서 원래 이름 조회"""
+        if node_id in self.original_names:
+            return self.original_names[node_id]
         return str(node_id) 
