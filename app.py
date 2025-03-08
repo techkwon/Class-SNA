@@ -4,6 +4,8 @@ import logging
 import os
 import tempfile
 import time
+import glob
+from datetime import datetime
 
 from src.api_manager import APIManager
 from src.data_processor import DataProcessor
@@ -106,6 +108,31 @@ def reset_session():
     
     # 앱 재실행
     st.rerun()
+
+def get_example_data_files():
+    """data 디렉토리에서 예시 데이터 파일 목록을 가져옵니다."""
+    try:
+        # 앱 디렉토리 경로
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(app_dir, 'data')
+        
+        # data 디렉토리가 없으면 생성
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+            logger.info(f"데이터 디렉토리 생성: {data_dir}")
+            return []  # 디렉토리가 없었으면 빈 목록 반환
+        
+        # CSV 파일 검색
+        csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
+        
+        # 파일명만 추출하고 확장자 제거
+        example_files = [os.path.splitext(os.path.basename(file))[0] for file in csv_files]
+        
+        logger.info(f"예시 데이터 파일 {len(example_files)}개 발견: {example_files}")
+        return sorted(example_files)
+    except Exception as e:
+        logger.error(f"예시 데이터 파일 목록 조회 중 오류: {str(e)}")
+        return ["example1", "example2"]  # 오류 발생 시 기본값 반환
 
 def main():
     # 전역 CSS 적용
