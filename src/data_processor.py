@@ -738,4 +738,79 @@ class DataProcessor:
         except Exception as e:
             logger.error(f"데이터 처리 중 오류 발생: {str(e)}")
             logger.error(traceback.format_exc())
+            return None
+
+    def analyze_with_ai(self, df):
+        """AI를 사용하여 데이터 구조를 분석합니다"""
+        try:
+            if not hasattr(self, 'api_manager') or not self.api_manager:
+                logger.warning("API 매니저가 초기화되지 않아 AI 분석을 건너뜁니다.")
+                return None
+            
+            # 샘플 데이터 준비 (너무 큰 데이터는 API 요청에 부담)
+            sample_rows = min(10, len(df))
+            sample_df = df.head(sample_rows)
+            
+            # 데이터프레임을 텍스트로 변환
+            sample_text = sample_df.to_string()
+            
+            # 열 정보 추가
+            columns_info = "\n\n열 정보:\n" + "\n".join([
+                f"{i}. {col} - 타입: {df[col].dtype}, 고유값 수: {df[col].nunique()}, 예시: {df[col].iloc[0]}"
+                for i, col in enumerate(df.columns)
+            ])
+            
+            # AI 분석 요청
+            prompt = f"""
+            다음은 학급 관계 네트워크 분석을 위한 설문조사 데이터입니다:
+            
+            {sample_text}
+            
+            {columns_info}
+            
+            이 데이터에서 다음 내용을 분석해주세요:
+            1. 응답자(학생) 이름이 포함된 열은 무엇인가요?
+            2. 관계 정보(누구를 선택했는지)가 포함된 열은 무엇인가요?
+            3. 이 데이터의 구조와, 어떤 식으로 학생 간 관계망을 구성할 수 있을지 설명해주세요.
+            
+            JSON 형식으로 다음 키를 포함하여 응답해주세요:
+            - student_name_column: 학생 이름이 있는 열 이름 (문자열)
+            - relationship_columns: 관계 정보가 있는 열 이름들 (문자열 리스트)
+            - description: 데이터 설명 (문자열)
+            """
+            
+            # API 호출
+            response = self.api_manager.generate_text(prompt)
+            
+            # 응답 파싱 시도
+            if response:
+                try:
+                    import json
+                    import re
+                    
+                    # JSON 부분 추출 시도
+                    json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(1)
+                    else:
+                        # JSON 블록 없으면 전체 텍스트에서 JSON 형식 찾기
+                        json_str = re.search(r'({[\s\S]*})', response).group(1)
+                    
+                    parsed_response = json.loads(json_str)
+                    logger.info(f"AI 분석 결과: {parsed_response}")
+                    return parsed_response
+                except Exception as e:
+                    logger.error(f"AI 응답 파싱 중 오류: {str(e)}")
+                    logger.debug(f"원본 응답: {response}")
+                    
+                    # 파싱 실패 시 간단한 응답 반환
+                    return {
+                        "student_name_column": None,
+                        "relationship_columns": [],
+                        "description": "AI 분석에 실패했습니다."
+                    }
+            
+            return None
+        except Exception as e:
+            logger.error(f"AI 분석 중 오류 발생: {str(e)}")
             return None 
