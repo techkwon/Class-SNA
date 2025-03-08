@@ -1309,108 +1309,70 @@ class ReportGenerator:
         if 'current_layout' not in st.session_state:
             st.session_state.current_layout = 'fruchterman'
         
-        if 'focus_node' not in st.session_state:
-            st.session_state.focus_node = None
-        
-        # 레이아웃 선택
+        # 레이아웃 선택 (PyVis 호환 레이아웃으로 변경)
         layout_options = {
             'fruchterman': '표준 레이아웃',
-            'spring': '스프링 레이아웃',
-            'circular': '원형 레이아웃',
-            'kamada': '카마다-카와이 레이아웃',
-            'spectral': '스펙트럴 레이아웃'
+            'force': '힘 기반 레이아웃',
+            'circular': '원형 레이아웃'
         }
         
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            selected_layout = st.selectbox(
-                "레이아웃 선택:",
-                options=list(layout_options.keys()),
-                format_func=lambda x: layout_options[x],
-                index=list(layout_options.keys()).index(st.session_state.current_layout),
-                key="layout_selector"
-            )
-            st.session_state.current_layout = selected_layout
+        selected_layout = st.selectbox(
+            "레이아웃 선택:",
+            options=list(layout_options.keys()),
+            format_func=lambda x: layout_options[x],
+            index=0 if st.session_state.current_layout not in layout_options else list(layout_options.keys()).index(st.session_state.current_layout),
+            key="layout_selector"
+        )
+        st.session_state.current_layout = selected_layout
         
-        with col2:
-            # 전체 보기 버튼
-            if st.session_state.focus_node:
-                if st.button("전체 네트워크 보기", key="reset_focus"):
-                    st.session_state.focus_node = None
-                    st.rerun()
-        
-        # 학생 중심 모드 안내
-        if st.session_state.focus_node:
-            st.info(f"**{st.session_state.focus_node}** 학생 중심 네트워크를 보고 있습니다. 다른 학생을 클릭하거나 '전체 네트워크 보기' 버튼을 눌러 전체 보기로 돌아갈 수 있습니다.")
-        else:
-            st.info("학생을 클릭하면 해당 학생 중심으로 네트워크가 재구성됩니다. 숨겨진 관계를 발견해보세요!")
-        
-        st.markdown("<p class='description-text'>아래 그래프는 학생들 간의 관계를 시각화한 것입니다. 원하는 곳을 자유롭게 확대/축소하고 끌어서 탐색할 수 있습니다. 노드에 마우스를 올리면 상세 정보가 표시됩니다.</p>", unsafe_allow_html=True)
+        st.markdown("<p class='description-text'>아래 그래프는 학생들 간의 관계를 시각화한 것입니다. 학생 노드에 마우스를 올리면 상세 정보가 표시됩니다. 노드를 드래그하여 위치를 조정할 수 있습니다.</p>", unsafe_allow_html=True)
         
         try:
-            # Plotly 네트워크 시각화 생성
-            visualizer = self.visualizer  # network_analyzer 대신 직접 visualizer 속성 사용
-            fig = visualizer.create_plotly_network(
+            # PyVis 네트워크 시각화 생성
+            visualizer = self.visualizer  # 직접 visualizer 속성 사용
+            pyvis_net = visualizer.create_pyvis_network(
                 layout=selected_layout,
-                width=800,
-                height=600, 
-                focus_node=st.session_state.focus_node,
-                neighbor_depth=1
+                height="600px",
+                width="100%"
             )
             
-            # 클릭 이벤트 콜백
-            def handle_node_click(trace, points, state):
-                if points.point_inds:
-                    # 클릭한 노드 인덱스
-                    idx = points.point_inds[0]
-                    # 클릭한 노드 ID (customdata에서 가져오기)
-                    node_id = points.customdata[idx]
-                    
-                    # 이미 같은 노드 포커스인 경우 전체 보기
-                    if st.session_state.focus_node == node_id:
-                        st.session_state.focus_node = None
-                    else:
-                        # 노드 ID를 세션 상태에 저장
-                        st.session_state.focus_node = node_id
-                    
-                    # 페이지 새로고침
-                    st.rerun()
-            
-            # Plotly 차트 구성 및 표시
-            config = {
-                'displayModeBar': True,  # 모드 바 표시
-                'scrollZoom': True,  # 스크롤 확대/축소 활성화
-                'toImageButtonOptions': {
-                    'format': 'png',  # 이미지 형식
-                    'filename': 'network_graph',  # 파일 이름
-                    'height': 800,  # 이미지 높이
-                    'width': 1000,  # 이미지 너비
-                    'scale': 2  # 이미지 해상도 배율
+            if pyvis_net:
+                # 임시 HTML 파일 생성
+                html_path = "temp_network.html"
+                pyvis_net.save_graph(html_path)
+                
+                # HTML 파일 읽기
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+                
+                # HTML 내용에 실제 학생 이름이 표시되도록 추가 스크립트 삽입
+                html_with_names = html_content.replace('</head>', '''
+                <style>
+                .node-label {
+                    font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
+                    font-size: 14px;
                 }
-            }
-            
-            # 드래그 모드 토글 버튼
-            toggle_col1, toggle_col2, toggle_col3 = st.columns([1, 1, 1])
-            with toggle_col1:
-                if st.button("이동 모드", key="pan_mode"):
-                    fig.update_layout(dragmode='pan')
-            with toggle_col2:
-                if st.button("확대 모드", key="zoom_mode"):
-                    fig.update_layout(dragmode='zoom')
-            with toggle_col3:
-                if st.button("선택 모드", key="select_mode"):
-                    fig.update_layout(dragmode='select')
-            
-            # Plotly 차트 표시
-            st.plotly_chart(
-                fig, 
-                config=config, 
-                use_container_width=True
-            )
-            
-            # JavaScript 콜백 등록 (클릭 이벤트)
-            fig.data[-1].on_click(handle_node_click)
-            
+                </style>
+                </head>
+                ''')
+                
+                # iframe 높이 설정
+                iframe_height = 700
+                
+                # HTML 컴포넌트 표시
+                components.html(html_with_names, height=iframe_height, scrolling=True)
+                
+                # 설명 텍스트
+                st.info("""
+                **사용 방법:**
+                - 노드를 드래그하여 위치 조정
+                - 마우스 휠로 확대/축소
+                - 노드에 마우스를 올리면 상세 정보 표시
+                - 네트워크 여백을 드래그하면 전체 화면 이동
+                """)
+            else:
+                st.error("네트워크 시각화를 생성할 수 없습니다. 데이터를 확인해 주세요.")
+                
         except Exception as e:
             st.error(f"네트워크 시각화 생성 중 오류가 발생했습니다: {str(e)}")
             logger.error(f"네트워크 시각화 오류: {str(e)}")

@@ -316,16 +316,36 @@ class NetworkVisualizer:
                     # 노드 데이터 복사
                     attrs = G.nodes[node].copy() if G.nodes[node] else {}
                     
-                    # 원래 이름 사용 (한글)
-                    original_name = str(node)
+                    # 원래 이름 검색 - 다양한 소스에서 시도
+                    original_name = str(node)  # 기본값은 노드 ID
+                    name_found = False
                     
-                    # 이름 매핑 검색 - 여러 위치에서 검색
-                    if hasattr(self.analyzer, 'id_to_name') and node in self.analyzer.id_to_name:
+                    # 방법 1: analyzer의 매핑에서 이름 찾기
+                    if hasattr(self.analyzer, 'id_to_name') and self.analyzer.id_to_name and node in self.analyzer.id_to_name:
                         original_name = self.analyzer.id_to_name.get(node, str(node))
-                    elif hasattr(self.analyzer, 'name_mapping') and node in self.analyzer.name_mapping:
+                        name_found = True
+                    
+                    # 방법 2: analyzer의 name_mapping에서 찾기
+                    elif hasattr(self.analyzer, 'name_mapping') and self.analyzer.name_mapping and node in self.analyzer.name_mapping:
                         original_name = self.analyzer.name_mapping.get(node, str(node))
-                    elif 'label' in attrs:
+                        name_found = True
+                        
+                    # 방법 3: 노드 속성의 label 필드에서 찾기
+                    elif 'label' in attrs and attrs['label']:
                         original_name = attrs['label']
+                        name_found = True
+                    
+                    # 방법 4: 노드 속성의 name 필드에서 찾기
+                    elif 'name' in attrs and attrs['name']:
+                        original_name = attrs['name']
+                        name_found = True
+                    
+                    # 학생 ID 형식인 경우 (예: student_0, student_1 등)
+                    # 실제 이름으로 변환 시도
+                    if not name_found and isinstance(original_name, str) and original_name.startswith('student_'):
+                        # 이 부분은 데이터에 따라 실제 학생 이름을 매핑하는 로직 추가 필요
+                        # 현재는 그대로 유지
+                        pass
                     
                     # ID와 이름 매핑 저장
                     self.id_mapping[node] = original_name
@@ -700,8 +720,16 @@ class NetworkVisualizer:
             node_y = []
             node_text = []
             node_hover = []
-            node_labels = []
-            node_ids = []  # 클릭 이벤트 위한 ID 저장
+            node_labels = {}
+            for node in G.nodes():
+                # 노드 ID가 이미 실제 이름인 경우 (G_original 사용 시)
+                node_labels[node] = str(node)
+                
+                # 추가적인 레이블 검색 (노드 속성 사용)
+                if 'label' in G.nodes[node] and G.nodes[node]['label']:
+                    node_labels[node] = G.nodes[node]['label']
+                elif 'name' in G.nodes[node] and G.nodes[node]['name']:
+                    node_labels[node] = G.nodes[node]['name']
             
             # 노드 데이터 설정
             for node in G.nodes():
@@ -715,8 +743,8 @@ class NetworkVisualizer:
                     node_ids.append(node)
                     
                     # 노드 이름 설정 (실제 학생 이름 사용)
-                    node_label = str(node)
-                    node_labels.append(node_label)
+                    node_label = node_labels.get(node, str(node))
+                    node_text.append(node_label)
                     
                     # 중심성 정보 가져오기
                     in_degree_val = 0
@@ -768,7 +796,6 @@ class NetworkVisualizer:
                         hover_text += "<br>클릭: 이 학생 중심 보기"
                     
                     node_hover.append(hover_text)
-                    node_text.append(node_label)
                 except Exception as e:
                     logger.warning(f"노드 {node} 정보 설정 중 오류: {str(e)}")
                     node_x.append(0)
@@ -922,81 +949,53 @@ class NetworkVisualizer:
             pyvis.network.Network: 시각화된 네트워크 객체
         """
         try:
-            # 로마자 이름으로 변환된 그래프 사용
-            G = self.G_roman.copy()
+            # 실제 학생 이름 그래프 사용 (G_roman 대신 G_original 사용)
+            G = None
+            
+            # 우선순위 1: G_original (실제 이름 사용)
+            if hasattr(self, 'G_original') and self.G_original is not None:
+                G = self.G_original.copy()
+                logger.info("PyVis 네트워크 생성: G_original 그래프 사용 (실제 학생 이름)")
+            # 우선순위 2: G_roman (로마자화된 이름)
+            elif hasattr(self, 'G_roman') and self.G_roman is not None:
+                G = self.G_roman.copy()
+                logger.info("PyVis 네트워크 생성: G_roman 그래프 사용 (로마자화된 이름)")
+            # 우선순위 3: 기본 그래프
+            elif hasattr(self, 'G') and self.G is not None:
+                G = self.G.copy()
+                logger.info("PyVis 네트워크 생성: 기본 G 그래프 사용")
+            # 우선순위 4: analyzer의 그래프
+            elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'graph') and self.analyzer.graph is not None:
+                G = self.analyzer.graph.copy()
+                logger.info("PyVis 네트워크 생성: analyzer.graph 사용")
+            # 우선순위 5: analyzer의 G
+            elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'G') and self.analyzer.G is not None:
+                G = self.analyzer.G.copy()
+                logger.info("PyVis 네트워크 생성: analyzer.G 사용")
             
             # 빈 그래프 확인
-            if len(G.nodes()) == 0:
+            if G is None or len(G.nodes()) == 0:
                 logging.error("빈 그래프로 PyVis 네트워크를 생성할 수 없습니다.")
                 return None
             
-            # 정점 레이블 매핑 (원래 한글 이름으로 표시)
-            node_labels = {}
-            for node in G.nodes():
-                # 실제 원래 이름 가져오기
-                node_labels[node] = self._get_original_name(node)
-            
-            # 중심성 데이터 가져오기
-            centrality_metrics = self.analyzer.get_centrality_metrics()
-            
-            # 정규화 함수 정의
-            def normalize(values, min_size=10, max_size=30):
-                """값을 지정된 범위로 정규화합니다 (문자열 처리 포함)"""
-                if not values:
-                    return {}
-                
-                # 문자열을 숫자로 변환하여 정규화 처리
-                numeric_values = {}
-                for k, v in values.items():
-                    try:
-                        # 문자열이나 다른 타입을 float로 변환 시도
-                        numeric_values[k] = float(v)
-                    except (ValueError, TypeError):
-                        # 변환 실패 시 기본값 0 사용
-                        numeric_values[k] = 0.0
-                        logging.warning(f"비숫자 값을 0으로 변환: 키={k}, 값={v}")
-                
-                # 빈 딕셔너리 체크
-                if not numeric_values:
-                    return {}
-                
-                # 최소값과 최대값 계산
-                min_val = min(numeric_values.values())
-                max_val = max(numeric_values.values())
-                
-                # 모든 값이 동일한 경우
-                if min_val == max_val:
-                    return {k: (max_size + min_size) / 2 for k in numeric_values.keys()}
-                
-                # 정규화 계산
-                return {k: min_size + (v - min_val) * (max_size - min_size) / (max_val - min_val) 
-                        for k, v in numeric_values.items()}
-                    
-            # 기본 중심성 (크기, 색상용)
-            in_degree = nx.in_degree_centrality(G)
-            bet_cent = nx.betweenness_centrality(G)
-            
             # 정규화
+            # 인기도(in-degree) 기반 노드 크기 계산
+            in_degree = nx.in_degree_centrality(G)
             node_sizes = normalize(in_degree)
+            
+            # 매개 중심성(betweenness) 기반 노드 색상 계산
+            bet_cent = nx.betweenness_centrality(G)
             node_colors = normalize(bet_cent, 0, 1)
             
             # 커뮤니티 탐지 (색상 다양화용)
-            community_data = self.analyzer.get_communities()
+            community_data = None
+            if hasattr(self.analyzer, 'get_communities'):
+                community_data = self.analyzer.get_communities()
+            elif hasattr(self.analyzer, 'communities'):
+                community_data = self.analyzer.communities
             
             # 색상 매핑
             color_map = {}
-            if community_data:
-                unique_communities = set(community_data.values())
-                colors = plt.cm.tab20(np.linspace(0, 1, len(unique_communities)))
-                
-                community_colors = {comm: f"rgba({int(r*255)},{int(g*255)},{int(b*255)},{a})" 
-                                    for comm, (r, g, b, a) in zip(unique_communities, colors)}
-                
-                for node, comm in community_data.items():
-                    # 로마자화된 이름으로 변환
-                    roman_node = self._get_original_name(str(node))
-                    if roman_node in G.nodes():
-                        color_map[roman_node] = community_colors[comm]
             
             # PyVis 네트워크 초기화
             net = Network(height=height, width=width, directed=True, notebook=False)
@@ -1043,19 +1042,31 @@ class NetworkVisualizer:
                     }}
                     """)
             
+            # 정점 레이블 매핑 (원래 한글 이름으로 표시)
+            node_labels = {}
+            for node in G.nodes():
+                # 노드 ID가 이미 실제 이름인 경우 (G_original 사용 시)
+                node_labels[node] = str(node)
+                
+                # 추가적인 레이블 검색 (노드 속성 사용)
+                if 'label' in G.nodes[node] and G.nodes[node]['label']:
+                    node_labels[node] = G.nodes[node]['label']
+                elif 'name' in G.nodes[node] and G.nodes[node]['name']:
+                    node_labels[node] = G.nodes[node]['name']
+
             # 노드 추가
             for node in G.nodes():
-                # 원래 이름 가져오기
-                original_name = self._get_original_name(node)
+                # 노드 레이블 (실제 학생 이름)
+                node_label = node_labels.get(node, str(node))
                 
                 # 노드 크기 및 색상
                 size = node_sizes.get(node, 15)
-                color = color_map.get(node, "#97C2FC")
+                color = node_colors.get(node, "#97C2FC")
                 
                 # 중심성 지표 가져오기
-                in_degree_val = centrality_metrics.get("in_degree", {}).get(original_name, 0)
-                out_degree_val = centrality_metrics.get("out_degree", {}).get(original_name, 0)
-                betweenness_val = centrality_metrics.get("betweenness", {}).get(original_name, 0)
+                in_degree_val = in_degree.get(node, 0)
+                out_degree_val = G.out_degree(node)
+                betweenness_val = bet_cent.get(node, 0)
                 
                 # 소수점 둘째자리로 반올림
                 in_degree_val = round(in_degree_val, 2)
@@ -1069,12 +1080,12 @@ class NetworkVisualizer:
                 out_arrows = len([u for u, v in G.edges() if u == node])
                 
                 # 툴팁 텍스트 (HTML 태그 제거, 일반 텍스트로 변환)
-                tooltip_text = f"{original_name}\n인기도(In): {in_degree_val}\n활동성(Out): {out_degree_val}\n매개성: {betweenness_val}\n받은 선택: {in_arrows}개\n한 선택: {out_arrows}개"
+                tooltip_text = f"{node_label}\n인기도(In): {in_degree_val}\n활동성(Out): {out_degree_val}\n매개성: {betweenness_val}\n받은 선택: {in_arrows}개\n한 선택: {out_arrows}개"
                 
                 # 정점 추가
                 net.add_node(
                     node, 
-                    label=original_name,
+                    label=node_label,
                     title=tooltip_text,
                     size=size, 
                     color=color
@@ -1085,8 +1096,12 @@ class NetworkVisualizer:
                 # 가중치 (기본값 1)
                 weight = data.get('weight', 1)
                 
+                # 노드 레이블 가져오기 (실제 학생 이름)
+                u_label = node_labels.get(u, str(u))
+                v_label = node_labels.get(v, str(v))
+                
                 # 엣지 설명 
-                title = f"{self._get_original_name(u)} → {self._get_original_name(v)}"
+                title = f"{u_label} → {v_label}"
                 if weight > 1:
                     title += f" (가중치: {weight})"
                 
