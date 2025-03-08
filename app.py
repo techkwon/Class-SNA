@@ -434,39 +434,27 @@ def show_analysis_results():
             
             # 네트워크 시각화 표시
             try:
-                # PyVis 네트워크 생성
-                pyvis_net = visualizer.create_pyvis_network(
-                    height="600px", 
-                    width="100%",
-                    layout=layout
+                # Plotly 네트워크 시각화 생성
+                fig = visualizer.create_plotly_network(
+                    layout=layout,
+                    width=None,  # 자동 너비 조정
+                    height=600
                 )
                 
-                if pyvis_net:
-                    # HTML을 직접 렌더링
-                    html_string = pyvis_net.html
-                    
-                    # 기본 메타 태그 추가
-                    if '<meta charset=' not in html_string:
-                        html_string = html_string.replace('<head>', '<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">')
-                    
-                    # 스타일 조정
-                    html_string = html_string.replace('width: 100%;', 'width: 100%; box-sizing: border-box;')
-                    
-                    # 자바스크립트 개선
-                    html_string = html_string.replace('</body>', '''
-                    <script>
-                    document.addEventListener("DOMContentLoaded", function() {
-                        setTimeout(function() {
-                            try {
-                                window.dispatchEvent(new Event('resize'));
-                            } catch (err) {}
-                        }, 300);
-                    });
-                    </script>
-                    </body>''')
-                    
-                    # HTML 렌더링
-                    st.components.v1.html(html_string, height=620, scrolling=True)
+                if fig:
+                    # Plotly 차트 표시
+                    st.plotly_chart(fig, use_container_width=True, config={
+                        'displayModeBar': True,
+                        'scrollZoom': True,
+                        'displaylogo': False,
+                        'toImageButtonOptions': {
+                            'format': 'png',
+                            'filename': f'network_{layout}',
+                            'height': 600,
+                            'width': 900,
+                            'scale': 2
+                        }
+                    })
                 else:
                     st.error("네트워크 시각화를 생성할 수 없습니다.")
             except Exception as e:

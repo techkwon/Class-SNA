@@ -1330,8 +1330,8 @@ class ReportGenerator:
                 # 간략한 설명
                 st.info("""
                 **대화형 네트워크 그래프**
-                - 노드(학생)를 드래그하여 위치를 조정할 수 있습니다
-                - 마우스 휠로 확대/축소가 가능합니다
+                - 확대/축소, 드래그를 통해 그래프를 자유롭게 탐색할 수 있습니다
+                - 노드 위에 마우스를 올리면 상세 정보가 표시됩니다
                 """)
                 
                 # 레이아웃 선택
@@ -1344,8 +1344,10 @@ class ReportGenerator:
                 with col1:
                     layout_options = {
                         'fruchterman': '방사형 레이아웃',
-                        'force': '힘 기반 레이아웃',
-                        'circular': '원형 레이아웃'
+                        'spring': '스프링 레이아웃',
+                        'circular': '원형 레이아웃',
+                        'kamada': '카마다-카와이',
+                        'spectral': '스펙트럴 레이아웃'
                     }
                     
                     # 레이아웃 선택 드롭다운
@@ -1353,42 +1355,37 @@ class ReportGenerator:
                         '레이아웃:', 
                         options=list(layout_options.keys()),
                         format_func=lambda x: layout_options[x],
-                        index=list(layout_options.keys()).index(st.session_state.layout_option),
+                        index=list(layout_options.keys()).index(st.session_state.layout_option)
+                            if st.session_state.layout_option in layout_options else 0,
                         key='layout_selectbox'
                     )
                     
                     # 세션 상태 업데이트
                     st.session_state.layout_option = layout
                 
-                # PyVis 네트워크 생성
+                # Plotly 네트워크 생성 (PyVis 대신 사용)
                 try:
-                    pyvis_net = self.visualizer.create_pyvis_network(
-                        height="600px", 
-                        width="100%",
-                        layout=layout
+                    # 네트워크 시각화 생성
+                    fig = self.visualizer.create_plotly_network(
+                        layout=layout,
+                        width=None,  # 자동 너비
+                        height=700  # 높이 지정
                     )
                     
-                    if pyvis_net:
-                        # HTML을 직접 렌더링
-                        html_string = pyvis_net.html
-                        
-                        # 기본 메타 태그 추가
-                        if '<meta charset=' not in html_string:
-                            html_string = html_string.replace('<head>', '<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">')
-                        
-                        # 네트워크 크기 조정 자바스크립트 추가
-                        html_string = html_string.replace('</body>', '''
-                        <script>
-                        document.addEventListener("DOMContentLoaded", function() {
-                            setTimeout(function() { 
-                                window.dispatchEvent(new Event('resize')); 
-                            }, 300);
-                        });
-                        </script>
-                        </body>''')
-                        
-                        # HTML 렌더링
-                        components.html(html_string, height=620, scrolling=True)
+                    # Plotly 그래프 표시
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True, config={
+                            'displayModeBar': True,
+                            'scrollZoom': True,
+                            'displaylogo': False,
+                            'toImageButtonOptions': {
+                                'format': 'png',
+                                'filename': f'network_graph_{layout}',
+                                'height': 700,
+                                'width': 900,
+                                'scale': 2
+                            }
+                        })
                     else:
                         st.error("네트워크 시각화를 생성할 수 없습니다")
                 except Exception as e:

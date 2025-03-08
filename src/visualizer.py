@@ -338,113 +338,193 @@ class NetworkVisualizer:
         return str(node_name)
     
     def create_plotly_network(self, layout="fruchterman", width=900, height=700):
-        """Plotly를 사용한 네트워크 그래프 생성"""
+        """Plotly를 사용해 인터랙티브 네트워크 그래프 생성
+        
+        Args:
+            layout (str): 그래프 레이아웃 알고리즘 ('fruchterman', 'spring', 'circular', 'kamada', 'spectral')
+            width (int): 그래프 너비
+            height (int): 그래프 높이
+            
+        Returns:
+            go.Figure: Plotly 그래프 객체
+        """
         try:
-            if not hasattr(self, 'analyzer') or not self.analyzer or not hasattr(self.analyzer, 'graph'):
-                # 분석기나 그래프가 없는 경우 빈 그래프 반환
-                fig = go.Figure()
-                fig.add_annotation(text="데이터가 없습니다", showarrow=False, font=dict(size=20))
-                fig.update_layout(width=width, height=height)
-                return fig
+            # 그래프 존재 확인
+            G = None
+            if hasattr(self, 'G_roman') and self.G_roman is not None:
+                # 로마자화된 그래프 사용
+                G = self.G_roman
+            elif hasattr(self, 'G') and self.G is not None:
+                # 일반 그래프 사용
+                G = self.G
+            elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'graph'):
+                # 애널라이저의 그래프 사용
+                G = self.analyzer.graph
+            elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'G'):
+                # 애널라이저의 G 사용
+                G = self.analyzer.G
             
-            G = self.analyzer.graph
-            
+            # 그래프가 없는 경우
             if G is None or G.number_of_nodes() == 0:
-                # 그래프가 비어 있는 경우 빈 그래프 반환
                 fig = go.Figure()
                 fig.add_annotation(text="네트워크 데이터가 없습니다", showarrow=False, font=dict(size=20))
                 fig.update_layout(width=width, height=height)
                 return fig
             
-            # 레이아웃 알고리즘 선택 및 포지션 계산
-            if layout == "circular":
-                pos = nx.circular_layout(G)
-            elif layout == "spring":
+            # 레이아웃 알고리즘 적용
+            pos = None
+            try:
+                if layout == "circular":
+                    pos = nx.circular_layout(G)
+                elif layout == "spring":
+                    pos = nx.spring_layout(G, seed=42, k=0.3, iterations=50)
+                elif layout == "kamada":
+                    pos = nx.kamada_kawai_layout(G)
+                elif layout == "spectral":
+                    pos = nx.spectral_layout(G)
+                else:
+                    # 기본값: fruchterman_reingold
+                    pos = nx.fruchterman_reingold_layout(G, seed=42, k=0.3, iterations=100)
+            except Exception as e:
+                logger.warning(f"레이아웃 알고리즘 적용 오류: {str(e)}, 대체 레이아웃 사용")
+                # 오류 시 안전한 레이아웃 사용
                 pos = nx.spring_layout(G, seed=42)
-            elif layout == "kamada":
-                pos = nx.kamada_kawai_layout(G)
-            elif layout == "spectral":
-                pos = nx.spectral_layout(G)
-            else:
-                # 기본값: fruchterman_reingold
-                pos = nx.fruchterman_reingold_layout(G, seed=42)
             
-            # 노드 크기 결정 (인입 연결 수 기준)
+            # 중심성 데이터 확인
+            centrality_metrics = {}
+            if hasattr(self, 'analyzer') and hasattr(self.analyzer, 'metrics'):
+                centrality_metrics = self.analyzer.metrics
+            elif hasattr(self, 'metrics'):
+                centrality_metrics = self.metrics
+            
+            # 노드 크기 설정 (중심성 기반)
             node_size = []
             for node in G.nodes():
                 try:
-                    # 인입 연결 수 + 1 (0이 되지 않도록)
-                    size = G.in_degree(node) + 1
-                    node_size.append(size * 10)  # 크기 조정
-                except:
-                    # 오류 발생 시 기본 크기 사용
-                    node_size.append(10)
+                    # 인기도(in-degree) 기반 크기 설정
+                    if 'in_degree' in centrality_metrics and node in centrality_metrics['in_degree']:
+                        # 중심성 값 가져오기
+                        centrality = centrality_metrics['in_degree'][node]
+                        # 값 유효성 검증
+                        if isinstance(centrality, (int, float)):
+                            size = 15 + centrality * 50
+                        elif isinstance(centrality, list) and centrality:
+                            size = 15 + float(centrality[0]) * 50
+                        else:
+                            size = 15
+                    else:
+                        # 인기도 정보가 없으면 연결 수 기반
+                        size = 15 + G.in_degree(node) * 2
+                    
+                    # 크기 범위 제한
+                    size = max(10, min(size, 50))
+                    node_size.append(size)
+                except Exception as e:
+                    logger.warning(f"노드 {node} 크기 계산 중 오류: {str(e)}")
+                    node_size.append(15)  # 기본 크기
             
-            # 노드 색상 설정 (커뮤니티 기준)
-            node_color = []
-            
-            # 커뮤니티 정보 확인
+            # 커뮤니티 정보 가져오기
             communities = None
             if hasattr(self.analyzer, 'communities') and self.analyzer.communities:
                 communities = self.analyzer.communities
+            elif hasattr(self.analyzer, 'get_communities'):
+                communities = self.analyzer.get_communities()
             
-            # 색상 팔레트 설정
-            color_palette = px.colors.qualitative.Set3 if 'px' in globals() else [
-                '#8dd3c7', '#ffffb3', '#bebada', '#fb8072', '#80b1d3', 
-                '#fdb462', '#b3de69', '#fccde5', '#d9d9d9', '#bc80bd',
-                '#ccebc5', '#ffed6f'
+            # 노드 색상 설정 (커뮤니티 기반)
+            node_color = []
+            
+            # 색상 팔레트
+            color_palette = [
+                '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+                '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+                '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
             ]
             
-            if communities:
-                # 커뮤니티 정보가 있으면 색상 설정
-                for node in G.nodes():
-                    try:
-                        comm_id = communities.get(node, 0)
+            # 커뮤니티별 색상 할당
+            comm_color_map = {}
+            
+            for node in G.nodes():
+                try:
+                    if communities and node in communities:
+                        comm_id = communities[node]
                         
-                        # 커뮤니티 ID가 리스트인 경우 첫 번째 값 사용
+                        # 다양한 타입 처리
                         if isinstance(comm_id, list):
-                            if len(comm_id) > 0:
-                                comm_id = comm_id[0]
-                            else:
-                                comm_id = 0
-                        
-                        # 커뮤니티 ID가 정수로 변환 가능한지 확인
-                        try:
-                            if not isinstance(comm_id, int):
-                                comm_id = int(comm_id)
-                        except (ValueError, TypeError):
-                            comm_id = 0
+                            comm_id = comm_id[0] if comm_id else 0
                             
-                        color_idx = comm_id % len(color_palette)
-                        node_color.append(color_palette[color_idx])
-                    except Exception as e:
-                        # 오류 발생 시 기본 색상 사용
-                        logger.warning(f"노드 {node}의 색상 설정 중 오류: {str(e)}")
-                        node_color.append('#cccccc')
-            else:
-                # 커뮤니티 정보가 없으면 기본 색상 사용
-                node_color = ['#1f77b4'] * G.number_of_nodes()
+                        # 문자열 타입 처리
+                        if not isinstance(comm_id, (int, float)):
+                            try:
+                                comm_id = int(comm_id)
+                            except (ValueError, TypeError):
+                                # 해시 값으로 처리
+                                comm_id = hash(str(comm_id)) % 10000
+                        
+                        # 색상 매핑에 없으면 새로 할당
+                        if comm_id not in comm_color_map:
+                            color_idx = len(comm_color_map) % len(color_palette)
+                            comm_color_map[comm_id] = color_palette[color_idx]
+                            
+                        node_color.append(comm_color_map[comm_id])
+                    else:
+                        # 커뮤니티 정보가 없으면 기본 색상 사용
+                        node_color.append('#1f77b4')
+                except Exception as e:
+                    logger.warning(f"노드 {node} 색상 설정 중 오류: {str(e)}")
+                    node_color.append('#cccccc')
             
             # 엣지 데이터 준비
             edge_x = []
             edge_y = []
+            edge_info = []
+            
+            # 엣지 두께 데이터
+            edge_width = []
             
             # 엣지 그리기
-            for edge in G.edges():
+            for u, v, data in G.edges(data=True):
                 try:
-                    x0, y0 = pos[edge[0]]
-                    x1, y1 = pos[edge[1]]
+                    x0, y0 = pos[u]
+                    x1, y1 = pos[v]
                     edge_x.extend([x0, x1, None])
                     edge_y.extend([y0, y1, None])
+                    
+                    # 엣지 정보
+                    source_name = self._get_original_name(u) if hasattr(self, '_get_original_name') else str(u)
+                    target_name = self._get_original_name(v) if hasattr(self, '_get_original_name') else str(v)
+                    
+                    # 엣지 두께 (가중치 기반)
+                    weight = 1
+                    if 'weight' in data:
+                        weight = data['weight']
+                    
+                    # 가중치가 숫자가 아니면 기본값 사용
+                    try:
+                        weight = float(weight)
+                    except (ValueError, TypeError):
+                        weight = 1
+                        
+                    # 두께 설정 (최소 1, 최대 5)
+                    thickness = max(1, min(1 + weight * 0.5, 5))
+                    edge_width.extend([thickness, thickness, 0])
+                    
+                    # 엣지 정보 (호버 텍스트)
+                    info = f"{source_name} → {target_name}"
+                    if weight > 1:
+                        info += f"<br>가중치: {weight}"
+                    
+                    edge_info.extend([info, info, None])
                 except Exception as e:
                     # 엣지 그리기 오류 무시
+                    logger.warning(f"엣지 {u}-{v} 처리 중 오류: {str(e)}")
                     continue
             
-            # 엣지 트레이스 생성
+            # 엣지 트레이스
             edge_trace = go.Scatter(
                 x=edge_x, y=edge_y,
-                line=dict(width=0.5, color='#888'),
-                hoverinfo='none',
+                line=dict(width=edge_width, color='rgba(150, 150, 150, 0.6)'),
+                hoverinfo='text',
+                text=edge_info,
                 mode='lines'
             )
             
@@ -452,88 +532,180 @@ class NetworkVisualizer:
             node_x = []
             node_y = []
             node_text = []
+            node_hover = []
+            node_labels = []
             
-            # 노드 좌표 및 텍스트 설정
-            for i, node in enumerate(G.nodes()):
+            # 노드 데이터 설정
+            for node in G.nodes():
                 try:
+                    # 노드 위치
                     x, y = pos[node]
                     node_x.append(x)
                     node_y.append(y)
                     
-                    # 한글 폰트 문제 확인
-                    use_romanized = not hasattr(self, 'has_korean_font') or not self.has_korean_font
-                    
-                    # 노드 레이블 설정
-                    if 'label' in G.nodes[node]:
-                        label = G.nodes[node]['label']
-                    elif hasattr(self, '_get_display_label'):
-                        label = self._get_display_label(node, use_romanized)
+                    # 노드 이름 설정
+                    if hasattr(self, '_get_original_name'):
+                        # 원래 한글 이름 사용
+                        node_label = self._get_original_name(node)
+                    elif 'label' in G.nodes[node]:
+                        node_label = G.nodes[node]['label']
                     else:
-                        label = str(node)
+                        node_label = str(node)
                     
-                    # 노드 정보 생성
-                    info = f"이름: {label}<br>"
-                    info += f"연결 수: {G.degree(node)}<br>"
+                    node_labels.append(node_label)
                     
-                    # 중심성 정보 추가
-                    if hasattr(self, 'metrics') and self.metrics:
-                        if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
-                            in_degree = self.metrics['in_degree'][node]
-                            info += f"인기도: {in_degree:.3f}<br>"
-                        
-                        if 'betweenness' in self.metrics and node in self.metrics['betweenness']:
-                            betweenness = self.metrics['betweenness'][node]
-                            info += f"매개 중심성: {betweenness:.3f}<br>"
+                    # 중심성 정보 가져오기
+                    in_degree_val = 0
+                    out_degree_val = 0
+                    betweenness_val = 0
+                    
+                    if 'in_degree' in centrality_metrics and node in centrality_metrics['in_degree']:
+                        try:
+                            in_degree_val = float(centrality_metrics['in_degree'][node])
+                        except (ValueError, TypeError):
+                            in_degree_val = 0
+                    
+                    if 'out_degree' in centrality_metrics and node in centrality_metrics['out_degree']:
+                        try:
+                            out_degree_val = float(centrality_metrics['out_degree'][node])
+                        except (ValueError, TypeError):
+                            out_degree_val = 0
+                    
+                    if 'betweenness' in centrality_metrics and node in centrality_metrics['betweenness']:
+                        try:
+                            betweenness_val = float(centrality_metrics['betweenness'][node])
+                        except (ValueError, TypeError):
+                            betweenness_val = 0
+                    
+                    # 호버 텍스트 생성
+                    hover_text = f"<b>{node_label}</b><br>"
+                    hover_text += f"인기도: {in_degree_val:.3f}<br>"
+                    hover_text += f"활동성: {out_degree_val:.3f}<br>"
+                    hover_text += f"매개성: {betweenness_val:.3f}<br>"
+                    
+                    # 연결 수 정보
+                    in_edges = G.in_degree(node)
+                    out_edges = G.out_degree(node)
+                    hover_text += f"받은 선택: {in_edges}개<br>"
+                    hover_text += f"한 선택: {out_edges}개"
                     
                     # 커뮤니티 정보 추가
                     if communities and node in communities:
                         comm_id = communities[node]
-                        info += f"그룹: {comm_id}"
+                        hover_text += f"<br>그룹: {comm_id}"
                     
-                    node_text.append(info)
+                    node_hover.append(hover_text)
+                    node_text.append(node_label)
                 except Exception as e:
-                    # 노드 처리 오류 시 기본값 사용
+                    logger.warning(f"노드 {node} 정보 설정 중 오류: {str(e)}")
                     node_x.append(0)
                     node_y.append(0)
-                    node_text.append(f"Error: {str(e)}")
+                    node_text.append(str(node))
+                    node_hover.append(f"오류: {str(e)}")
+                    node_labels.append(str(node))
             
-            # 노드 트레이스 생성 (크기와 색상 적용)
+            # 노드 트레이스
             node_trace = go.Scatter(
-                x=node_x, y=node_y,
-                mode='markers',
+                x=node_x, 
+                y=node_y,
+                mode='markers+text',
                 hoverinfo='text',
                 text=node_text,
+                hovertext=node_hover,
+                textposition="top center",
+                textfont=dict(
+                    family="'Noto Sans KR', 'Malgun Gothic', sans-serif",
+                    size=10,
+                    color="black"
+                ),
                 marker=dict(
                     showscale=False,
                     color=node_color,
                     size=node_size,
-                    line=dict(width=1, color='#888')
+                    line=dict(color='black', width=1),
+                    opacity=0.9
                 )
             )
             
-            # 그래프 생성
+            # 그래프 레이아웃 설정
             fig = go.Figure(
                 data=[edge_trace, node_trace],
                 layout=go.Layout(
-                    title='학급 관계 네트워크',
-                    titlefont=dict(size=16),
+                    title='<b>학급 관계 네트워크</b>',
+                    titlefont=dict(size=18, family="'Noto Sans KR', sans-serif"),
                     showlegend=False,
                     hovermode='closest',
-                    margin=dict(b=20, l=5, r=5, t=40),
+                    margin=dict(b=20, l=20, r=20, t=40),
+                    annotations=[],
                     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                     yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                     width=width,
-                    height=height
+                    height=height,
+                    plot_bgcolor='rgba(248,249,250,1)',  # 배경색
+                    paper_bgcolor='rgba(248,249,250,1)'  # 주변 배경색
                 )
+            )
+            
+            # 다크 모드 지원
+            fig.update_layout(
+                template="plotly",
+                margin=dict(l=10, r=10, t=50, b=10)
+            )
+            
+            # 인터랙티브 기능 추가
+            fig.update_layout(
+                dragmode='pan',  # 드래그 모드 설정
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=12,
+                    font_family="'Noto Sans KR', sans-serif"
+                ),
+                # 커스텀 버튼들 추가
+                updatemenus=[
+                    dict(
+                        type="buttons",
+                        direction="right",
+                        x=0.1,
+                        y=1.1,
+                        showactive=True,
+                        buttons=[
+                            dict(
+                                label="확대",
+                                method="relayout",
+                                args=["dragmode", "zoom"]
+                            ),
+                            dict(
+                                label="이동",
+                                method="relayout",
+                                args=["dragmode", "pan"]
+                            ),
+                            dict(
+                                label="초기화",
+                                method="update",
+                                args=[
+                                    {"visible": [True, True]},
+                                    {"dragmode": "pan"}
+                                ]
+                            )
+                        ]
+                    )
+                ]
             )
             
             return fig
             
         except Exception as e:
-            logger.error(f"네트워크 시각화 생성 중 오류: {str(e)}")
+            logger.error(f"Plotly 네트워크 시각화 생성 중 오류: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
             # 오류 발생 시 빈 그래프 반환
             fig = go.Figure()
-            fig.add_annotation(text=f"시각화 생성 오류: {str(e)}", showarrow=False, font=dict(size=12, color="red"))
+            fig.add_annotation(
+                text=f"네트워크 시각화 생성 중 오류가 발생했습니다:<br>{str(e)}",
+                showarrow=False,
+                font=dict(size=14, color="red")
+            )
             fig.update_layout(width=width, height=height)
             return fig
     
