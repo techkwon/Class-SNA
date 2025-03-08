@@ -362,18 +362,28 @@ class NetworkVisualizer:
         return self.has_korean_font
     
     def _get_display_label(self, node_name, use_romanized=True):
-        """노드 레이블 표시용 이름 반환 (한글 폰트 문제 대응)"""
-        if not node_name:
+        """노드 레이블 표시를 위한 방법 결정 (한글 폰트 문제 대응)"""
+        if node_name is None:
             return "Unknown"
             
-        # 항상 로마자 변환 적용 (내부 처리용)
-        romanized = romanize_korean(str(node_name))
-        
-        # 사용자에게 표시할 때는 원본 또는 로마자 선택
-        if not use_romanized and hasattr(self, 'has_korean_font') and self.has_korean_font:
-            return str(node_name)  # 한글 폰트가 있으면 원본 이름 반환
+        # 노드가 ID인 경우 원래 이름으로 변환
+        if hasattr(self.analyzer, 'name_mapping') and str(node_name) in self.analyzer.name_mapping:
+            original_name = self.analyzer.name_mapping[str(node_name)]
         else:
-            return romanized  # 그 외에는 로마자 이름 반환
+            original_name = str(node_name)
+            
+        # 로마자 변환 여부 결정
+        if use_romanized:
+            # 로마자 변환 수행
+            if hasattr(self.analyzer, 'romanized_mapping') and original_name in self.analyzer.romanized_mapping:
+                # 이미 저장된 로마자 매핑 사용
+                return self.analyzer.romanized_mapping[original_name]
+            else:
+                # 직접 변환
+                return romanize_korean(original_name)
+        else:
+            # 원본 이름 그대로 사용
+            return original_name
     
     def create_plotly_network(self, layout="fruchterman", width=900, height=700):
         """Plotly를 사용한 네트워크 그래프 생성"""

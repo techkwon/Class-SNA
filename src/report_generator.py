@@ -822,10 +822,10 @@ class ReportGenerator:
                 metrics_data = {
                     "지표": ["받은 선택 수", "한 선택 수", "매개 중심성", "소속 그룹"],
                     "값": [
-                        f"{in_degree_actual} ({in_degree:.3f})" if isinstance(in_degree, (int, float)) else in_degree_actual,
-                        out_degree_actual,
-                        f"{betweenness:.3f}" if isinstance(betweenness, (int, float)) else betweenness,
-                        community_id
+                        f"{in_degree_actual}",
+                        f"{out_degree_actual}",
+                        f"{betweenness:.3f}" if isinstance(betweenness, (int, float)) else str(betweenness),
+                        f"{community_id}"
                     ]
                 }
                 st.table(pd.DataFrame(metrics_data))

@@ -13,11 +13,24 @@ class NetworkAnalyzer:
     
     def __init__(self, network_data):
         self.nodes_df = network_data["nodes"]
+        self.original_nodes = network_data.get("original_nodes", self.nodes_df)
         self.edges_df = network_data["edges"]
         self.question_types = network_data.get("question_types", {})
         self.graph = None
         self.metrics = {}
         self.communities = None
+        
+        # 이름 매핑 저장
+        self.id_mapping = network_data.get("id_mapping", {})  # 이름 -> ID
+        self.name_mapping = network_data.get("name_mapping", {})  # ID -> 이름
+        self.romanized_mapping = network_data.get("romanized_mapping", {})  # 이름 -> 로마자
+        self.reverse_romanized = network_data.get("reverse_romanized", {})  # 로마자 -> 이름
+        
+        # Gemini 개선 데이터 저장
+        self.gemini_enhanced = network_data.get("gemini_enhanced", False)
+        self.node_scores = network_data.get("node_scores", {})
+        self.enhanced_edge_weights = network_data.get("enhanced_edge_weights", {})
+        self.gemini_communities = network_data.get("gemini_communities", {})
         
         # 그래프 생성
         self._create_graph()
@@ -221,22 +234,74 @@ class NetworkAnalyzer:
                 self.calculate_centrality()
             
             for metric_name, metric_values in self.metrics.items():
-                values = list(metric_values.values())
-                stats[f"{metric_name}_mean"] = np.mean(values)
-                stats[f"{metric_name}_std"] = np.std(values)
-                stats[f"{metric_name}_max"] = np.max(values)
+                # 각 값이 리스트인 경우 처리
+                processed_values = []
+                max_value = 0
+                max_node = None
                 
-                # 중심성이 가장 높은 노드 식별
-                max_node = max(metric_values.items(), key=lambda x: x[1])[0]
-                stats[f"{metric_name}_max_node"] = max_node
+                for node, value in metric_values.items():
+                    # 리스트 타입 처리
+                    if isinstance(value, list):
+                        if value:  # 리스트가 비어있지 않은 경우
+                            processed_value = value[0]
+                        else:
+                            processed_value = 0
+                    else:
+                        processed_value = value
+                    
+                    # 숫자 형태로 변환 (문자열인 경우)
+                    try:
+                        processed_value = float(processed_value)
+                    except (ValueError, TypeError):
+                        processed_value = 0
+                        
+                    processed_values.append(processed_value)
+                    
+                    # 최대값 노드 업데이트
+                    if processed_value > max_value:
+                        max_value = processed_value
+                        max_node = node
+                        
+                # 통계 계산
+                if processed_values:
+                    stats[f"{metric_name}_mean"] = np.mean(processed_values)
+                    stats[f"{metric_name}_std"] = np.std(processed_values)
+                    stats[f"{metric_name}_max"] = np.max(processed_values)
+                else:
+                    stats[f"{metric_name}_mean"] = 0
+                    stats[f"{metric_name}_std"] = 0
+                    stats[f"{metric_name}_max"] = 0
+                
+                # 중심성이 가장 높은 노드 저장
+                if max_node is not None:
+                    stats[f"{metric_name}_max_node"] = str(max_node)
+                else:
+                    stats[f"{metric_name}_max_node"] = ""
             
-            # 커뮤니티 정보
-            if not self.communities:
-                self.detect_communities()
-            
-            stats["community_count"] = len(set(self.communities.values()))
-            
-            logger.info("네트워크 요약 통계 계산 완료")
+            # 커뮤니티 정보 추가
+            if self.communities:
+                stats["num_communities"] = len(self.communities)
+                
+                # 커뮤니티 크기 통계
+                community_sizes = []
+                for community_id, members in self.communities.items():
+                    # 멤버가 리스트가 아닌 경우 처리
+                    if isinstance(members, list):
+                        size = len(members)
+                    else:
+                        size = 1  # 단일 멤버로 간주
+                    community_sizes.append(size)
+                
+                if community_sizes:
+                    stats["community_size_mean"] = np.mean(community_sizes)
+                    stats["community_size_std"] = np.std(community_sizes)
+                    stats["community_size_max"] = np.max(community_sizes)
+            else:
+                stats["num_communities"] = 0
+                stats["community_size_mean"] = 0
+                stats["community_size_std"] = 0
+                stats["community_size_max"] = 0
+                
             return stats
             
         except Exception as e:
@@ -287,20 +352,28 @@ class NetworkAnalyzer:
         return [(u, v, data.get('weight', 1)) for u, v, data in self.graph.edges(data=True)]
         
     def get_communities(self):
-        """각 커뮤니티에 속한 노드 목록을 반환
-        반환 형식: {community_id: [node1, node2, ...], ...}
-        """
-        if self.communities is None:
+        """커뮤니티 멤버십 정보 반환"""
+        if not hasattr(self, 'communities') or not self.communities:
             self.detect_communities()
             
-        # 커뮤니티별 노드 목록 생성
-        community_nodes = {}
-        for node, community_id in self.communities.items():
-            if community_id not in community_nodes:
-                community_nodes[community_id] = []
-            community_nodes[community_id].append(node)
-            
-        return community_nodes
+        # 안전한 복사본 생성 (모든 키를 문자열로 변환)
+        safe_communities = {}
+        
+        if self.communities:
+            for comm_id, members in self.communities.items():
+                # 커뮤니티 ID를 문자열로 변환 (안전한 처리)
+                safe_comm_id = str(comm_id)
+                
+                # 멤버가 리스트인지 확인
+                if isinstance(members, list):
+                    safe_communities[safe_comm_id] = members.copy()
+                elif isinstance(members, set):
+                    safe_communities[safe_comm_id] = list(members)
+                else:
+                    # 단일 값인 경우 리스트로 감싸기
+                    safe_communities[safe_comm_id] = [members]
+        
+        return safe_communities
         
     def get_community_colors(self):
         """각 노드의 커뮤니티 기반 색상 맵을 반환
