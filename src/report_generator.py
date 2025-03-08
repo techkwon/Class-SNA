@@ -89,8 +89,91 @@ class ReportGenerator:
         """
         st.markdown(dark_mode_css, unsafe_allow_html=True)
     
+    def _show_network_stats(self, network_data):
+        """네트워크 기본 통계 정보를 표시합니다"""
+        try:
+            # 기본 네트워크 통계
+            st.write("**기본 네트워크 통계:**")
+            
+            # 노드 및 엣지 수
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("학생 수", len(self.graph.nodes))
+            with col2:
+                st.metric("관계 수", len(self.graph.edges))
+            
+            # 네트워크 밀도 및 평균 경로 길이
+            if len(self.graph.nodes) > 1:  # 노드가 2개 이상일 때만 계산
+                col1, col2 = st.columns(2)
+                with col1:
+                    density = nx.density(self.graph)
+                    st.metric("네트워크 밀도", f"{density:.4f}")
+                
+                # 평균 경로 길이 (비연결 그래프면 최대 연결 컴포넌트에 대해 계산)
+                with col2:
+                    try:
+                        if nx.is_strongly_connected(self.graph):
+                            avg_path = nx.average_shortest_path_length(self.graph)
+                            st.metric("평균 경로 길이", f"{avg_path:.2f}")
+                        else:
+                            largest_cc = max(nx.strongly_connected_components(self.graph), key=len)
+                            if len(largest_cc) > 1:
+                                subgraph = self.graph.subgraph(largest_cc)
+                                avg_path = nx.average_shortest_path_length(subgraph)
+                                st.metric("평균 경로 길이 (최대 연결 요소)", f"{avg_path:.2f}")
+                            else:
+                                st.metric("평균 경로 길이", "계산 불가 (연결 없음)")
+                    except Exception as e:
+                        st.metric("평균 경로 길이", "계산 불가")
+                        logger.warning(f"평균 경로 길이 계산 중 오류: {str(e)}")
+            
+            # 커뮤니티(그룹) 수
+            if self.communities:
+                st.metric("발견된 그룹 수", len(self.communities))
+        
+        except Exception as e:
+            logger.error(f"네트워크 통계 표시 중 오류: {str(e)}")
+            st.warning("네트워크 통계 표시 중 오류가 발생했습니다.")
+    
     def generate_summary_section(self):
         """요약 정보 섹션 생성"""
+        try:
+            # 요약 통계 계산
+            total_nodes = len(self.graph.nodes())
+            total_edges = len(self.graph.edges())
+            
+            # 요약 섹션 레이아웃
+            st.markdown("## 네트워크 요약")
+            st.markdown(f"이 네트워크는 **{total_nodes}명의 학생**과 **{total_edges}개의 관계**로 구성되어 있습니다.")
+            
+            # 기본 네트워크 메트릭 표시
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown("#### 학생 수")
+                st.markdown(f"<h2 style='text-align: center;'>{total_nodes}</h2>", unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("#### 관계 수")
+                st.markdown(f"<h2 style='text-align: center;'>{total_edges}</h2>", unsafe_allow_html=True)
+            
+            with col3:
+                density = nx.density(self.graph)
+                st.markdown("#### 네트워크 밀도")
+                st.markdown(f"<h2 style='text-align: center;'>{density:.3f}</h2>", unsafe_allow_html=True)
+            
+            # 커뮤니티 정보
+            st.markdown("#### 그룹 구성")
+            for comm_id, members in self.communities.items():
+                st.markdown(f"**그룹 {comm_id}**: {', '.join(members)}")
+                
+            return True
+        except Exception as e:
+            logger.error(f"요약 섹션 생성 오류: {str(e)}")
+            st.error("요약 정보를 생성하는 중 오류가 발생했습니다.")
+            return False
+    
+    def generate_network_summary(self):
+        """네트워크 요약 정보를 생성합니다"""
         try:
             # 요약 통계 계산
             stats = self.analyzer.get_summary_statistics()
