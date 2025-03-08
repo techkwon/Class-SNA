@@ -12,9 +12,31 @@ class NetworkAnalyzer:
     """소셜 네트워크 분석 기능을 제공하는 클래스"""
     
     def __init__(self, network_data):
-        self.nodes_df = network_data["nodes"]
-        self.original_nodes = network_data.get("original_nodes", self.nodes_df)
-        self.edges_df = network_data["edges"]
+        """NetworkAnalyzer 클래스 초기화
+        
+        Arguments:
+            network_data (dict): 네트워크 데이터 (노드, 엣지 등)
+        """
+        # 노드와 엣지 데이터 가져오기
+        nodes = network_data["nodes"]
+        edges = network_data["edges"]
+        
+        # 노드 데이터를 DataFrame으로 변환 (리스트인 경우)
+        if isinstance(nodes, list):
+            self.nodes_df = pd.DataFrame(nodes)
+        else:
+            self.nodes_df = nodes
+        
+        # 엣지 데이터를 DataFrame으로 변환 (리스트인 경우)
+        if isinstance(edges, list):
+            self.edges_df = pd.DataFrame(edges)
+        else:
+            self.edges_df = edges
+        
+        # 원본 노드 데이터 저장
+        self.original_nodes = network_data.get("original_nodes", nodes)
+        
+        # 기타 데이터 저장
         self.question_types = network_data.get("question_types", {})
         self.graph = None
         self.metrics = {}

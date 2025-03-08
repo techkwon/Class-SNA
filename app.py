@@ -292,22 +292,40 @@ def main():
         if not st.session_state.analyzed or st.session_state.last_analyzed_url != sheet_url:
             with st.spinner("데이터 분석 중... 잠시만 기다려주세요."):
                 try:
+                    # 진행 상황 표시를 위한 컴포넌트
+                    progress_container = st.container()
+                    progress_bar = progress_container.progress(0, "분석 준비 중...")
+                    progress_text = progress_container.empty()
+                    
                     # API 관리자 초기화
+                    progress_text.text("API 초기화 중...")
+                    progress_bar.progress(10)
                     api_manager = APIManager()
                     
                     # 데이터 처리기 초기화
+                    progress_text.text("데이터 처리기 초기화 중...")
+                    progress_bar.progress(20)
                     data_processor = DataProcessor(api_manager)
                     
                     # 데이터 로드 및 처리
                     if sheet_url.startswith("example"):
                         # 파일 경로 구성
+                        progress_text.text("예시 데이터 로드 중...")
+                        progress_bar.progress(30)
                         example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{sheet_url}.csv")
                         if os.path.exists(example_path):
                             # 예시 파일 로드
                             df = pd.read_csv(example_path)
                             st.success(f"예시 데이터를 성공적으로 로드했습니다: {sheet_url}")
                             
+                            # 데이터 미리보기
+                            progress_text.text("데이터 미리보기 생성 중...")
+                            progress_bar.progress(40)
+                            st.dataframe(df.head(), use_container_width=True)
+                            
                             # 데이터 처리
+                            progress_text.text("네트워크 데이터 생성 중...")
+                            progress_bar.progress(50)
                             network_data = data_processor.process_network_data(df)
                             if network_data:
                                 # 네트워크 데이터 저장
@@ -315,30 +333,69 @@ def main():
                                 st.session_state.analyzed = True
                                 st.session_state.last_analyzed_url = sheet_url
                                 
-                                # 분석 결과 표시
-                                show_analysis_results()
+                                # 분석 결과 계산
+                                progress_text.text("네트워크 분석 중...")
+                                progress_bar.progress(70)
+                                
+                                # 한글 폰트 설정
+                                progress_text.text("시각화 준비 중...")
+                                progress_bar.progress(90)
+                                set_korean_font()
+                                
+                                # 진행 완료
+                                progress_bar.progress(100)
+                                progress_text.text("분석 완료!")
+                                
+                                # 결과 표시 컨테이너
+                                results_container = st.container()
+                                with results_container:
+                                    # 분석 결과 표시
+                                    show_analysis_results()
                             else:
+                                progress_bar.empty()
+                                progress_text.empty()
                                 st.error("데이터 처리에 실패했습니다.")
                         else:
+                            progress_bar.empty()
+                            progress_text.empty()
                             st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
                     else:
                         # 구글 시트에서 데이터 로드
                         with st.status("구글 시트에서 데이터 로드 중...") as status:
+                            progress_text.text("구글 시트 데이터 로드 중...")
+                            progress_bar.progress(30)
                             result = data_processor.process_survey_data(sheet_url)
                             if result:
                                 status.update(label="데이터 처리 완료!", state="complete")
+                                progress_text.text("네트워크 분석 중...")
+                                progress_bar.progress(70)
                                 
                                 # 네트워크 데이터 저장
                                 st.session_state.network_data = result
                                 st.session_state.analyzed = True
                                 st.session_state.last_analyzed_url = sheet_url
                                 
+                                # 분석 결과 계산
+                                progress_text.text("시각화 준비 중...")
+                                progress_bar.progress(90)
+                                set_korean_font()
+                                
+                                # 진행 완료
+                                progress_bar.progress(100)
+                                progress_text.text("분석 완료!")
+                                
                                 # 분석 결과 표시
                                 show_analysis_results()
                             else:
+                                progress_bar.empty()
+                                progress_text.empty()
                                 status.update(label="데이터 처리 실패", state="error")
                                 st.error("구글 시트 데이터를 처리할 수 없습니다. URL을 확인해주세요.")
                 except Exception as e:
+                    if 'progress_bar' in locals():
+                        progress_bar.empty()
+                    if 'progress_text' in locals():
+                        progress_text.empty()
                     handle_error(f"데이터 분석 중 오류 발생: {str(e)}")
         else:
             # 이미 분석된 결과가 있는 경우 바로 표시
