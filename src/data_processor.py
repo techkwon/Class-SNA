@@ -592,15 +592,19 @@ class DataProcessor:
             analysis_result = self.analyze_data_structure(raw_data)
             
             # 학생 정보와 질문 정보 추출
-            students = analysis_result.get('students', [])
-            questions = analysis_result.get('relationship_columns', [])
+            students_set = analysis_result.get('students', set())
+            relationship_columns = analysis_result.get('relationship_columns', [])
+            respondent_column = analysis_result.get('respondent_column')
+            
+            # set을 리스트로 변환
+            students = list(students_set)
             
             # 충분한 데이터가 있는지 확인
             if not students or len(students) < 2:
                 logger.error("충분한 학생 데이터가 없습니다 (최소 2명 필요)")
                 return None
             
-            if not questions:
+            if not relationship_columns:
                 logger.warning("관계 질문을 찾을 수 없습니다. 무작위 데이터를 생성합니다.")
             
             # 이름 매핑 생성 (로마자 변환용)
@@ -610,35 +614,60 @@ class DataProcessor:
             romanized_mapping = {}     # 이름 -> 로마자
             reverse_romanized = {}     # 로마자 -> 이름
             
-            # 1. 모든 학생에게 고유 ID 할당
+            # 모든 학생에게 고유 ID 할당
             for i, student in enumerate(students):
                 student_id = f"student_{i}"
-                id_mapping[student] = student_id
-                name_mapping[student_id] = student
+                id_mapping[student] = student_id       # 이름 -> ID
+                name_mapping[student_id] = student     # ID -> 이름
                 
-                # 로마자 변환도 수행
+                # 한글 이름인 경우 로마자 변환
                 romanized = romanize_korean(student)
-                romanized_mapping[student] = romanized
-                reverse_romanized[romanized] = student
+                romanized_mapping[student] = romanized         # 이름 -> 로마자
+                reverse_romanized[romanized] = student         # 로마자 -> 이름
             
-            # 매핑 정보를 세션 상태에 저장
-            st.session_state.id_mapping = id_mapping          # 이름 -> ID
-            st.session_state.name_mapping = name_mapping      # ID -> 이름
-            st.session_state.romanized_names = romanized_mapping  # 이름 -> 로마자
-            st.session_state.reverse_romanized = reverse_romanized  # 로마자 -> 이름
-            
-            logger.info(f"데이터 구조 분석 완료: {len(students)}명의 학생, {len(questions)}개의 관계 질문 식별됨")
             logger.info(f"학생 ID 매핑 생성 완료: {len(id_mapping)}개의 매핑")
             
-            # 네트워크 데이터 형태로 변환
+            # 네트워크 데이터 변환
             logger.info("네트워크 데이터 변환 시작")
+            
+            # 결과 데이터 구성
+            network_data = {
+                'nodes': [],
+                'edges': [],
+                'id_mapping': id_mapping,
+                'name_mapping': name_mapping,
+                'romanized_mapping': romanized_mapping,
+                'reverse_romanized': reverse_romanized,
+                'relationship_types': analysis_result.get('relationship_types', []),
+                'metadata': analysis_result.get('metadata', {})
+            }
+            
+            # 노드 데이터 생성 (학생 목록)
+            for student in students:
+                student_id = id_mapping.get(student, student)
+                network_data['nodes'].append({
+                    'id': student_id,
+                    'name': student,
+                    'romanized': romanized_mapping.get(student, student)
+                })
             
             # 정규화된 엣지 데이터 생성 (ID 기반)
             edges = []
-            for question in questions:
+            
+            # 응답자 열이 없으면 첫 번째 열 사용
+            if not respondent_column and len(raw_data.columns) > 0:
+                respondent_column = raw_data.columns[0]
+            
+            for question in relationship_columns:
                 # 각 질문에 대한 응답 추출
                 for idx, row in raw_data.iterrows():
-                    source_name = row.get(students[0])  # 응답자 (첫 번째 열)
+                    # 응답자 열에서 이름 가져오기
+                    if respondent_column:
+                        source_name = row.get(respondent_column)
+                    else:
+                        # 응답자 열이 없으면 인덱스를 이름으로 사용
+                        source_name = str(idx)
+                    
                     if pd.isna(source_name) or source_name == '':
                         continue
                     
@@ -650,102 +679,101 @@ class DataProcessor:
                     if pd.isna(response) or response == '':
                         continue
                     
-                    # 쉼표로 구분된 응답을 분리
-                    target_names = [t.strip() for t in str(response).split(',')]
+                    # 여러 응답 처리 (쉼표, 세미콜론, 줄바꿈 등으로 구분)
+                    targets = []
                     
-                    # 엣지 생성 (응답자 -> 선택된 학생)
-                    for target_name in target_names:
-                        if target_name in students and source_name != target_name:
-                            # 이름을 ID로 변환
-                            target = id_mapping.get(target_name, target_name)
-                            
-                            edges.append({
-                                'source': source,
-                                'target': target,
-                                'source_name': source_name,  # 원본 이름 보존
-                                'target_name': target_name,  # 원본 이름 보존
-                                'question': question,
-                                'weight': 1
-                            })
+                    # 문자열 응답 처리
+                    if isinstance(response, str):
+                        # 여러 구분자로 분리 시도 (쉼표, 세미콜론, 줄바꿈)
+                        separators = [',', ';', '\n']
+                        for sep in separators:
+                            if sep in response:
+                                parts = [p.strip() for p in response.split(sep)]
+                                targets.extend([p for p in parts if p])
+                                break
+                        else:  # 구분자 없는 경우
+                            targets = [response.strip()]
+                    # 숫자형 응답 처리
+                    elif not pd.isna(response):
+                        targets = [str(response)]
+                    
+                    # 각 타겟에 대한 엣지 생성
+                    for target_name in targets:
+                        if pd.isna(target_name) or target_name == '' or target_name not in id_mapping:
+                            # 올바른 학생 이름이 아닌 경우 건너뜀
+                            continue
+                        
+                        # 타겟 ID 변환
+                        target = id_mapping.get(target_name, target_name)
+                        
+                        # 엣지 데이터 추가
+                        edges.append({
+                            'source': source,
+                            'target': target,
+                            'question': question,
+                            'weight': 1  # 기본 가중치
+                        })
             
-            # 엣지 데이터 통합 (중복 엣지는 가중치 증가)
-            edge_dict = {}
+            # 엣지 정규화 (중복 엣지 처리)
+            edge_dict = {}  # 소스-타겟 쌍 기반 딕셔너리
+            
             for edge in edges:
                 key = (edge['source'], edge['target'])
-                if key not in edge_dict:
-                    edge_dict[key] = edge.copy()
-                else:
+                
+                if key in edge_dict:
+                    # 이미 존재하는 엣지면 가중치 증가
                     edge_dict[key]['weight'] += edge['weight']
+                    if edge['question'] not in edge_dict[key]['questions']:
+                        edge_dict[key]['questions'].append(edge['question'])
+                else:
+                    # 새로운 엣지 추가
+                    edge_dict[key] = {
+                        'source': edge['source'],
+                        'target': edge['target'],
+                        'weight': edge['weight'],
+                        'questions': [edge['question']]
+                    }
             
-            # 엣지 리스트로 변환
+            # 정규화된 엣지 리스트
             normalized_edges = list(edge_dict.values())
             
-            logger.info(f"네트워크 데이터 변환 완료: {len(id_mapping)}명의 학생, {len(normalized_edges)}개의 관계")
+            # 실제 노드 ID 목록 추출 (엣지에 사용된 노드들)
+            node_ids = []
+            node_set = set()
             
-            # ID로 변환된 노드 리스트 생성
-            node_ids = list(name_mapping.keys())
+            # 엣지에 사용된 노드 추출
+            for edge in normalized_edges:
+                source = edge['source']
+                target = edge['target']
+                
+                if source not in node_set:
+                    node_set.add(source)
+                    node_ids.append({
+                        'id': source,
+                        'name': name_mapping.get(source, source),
+                        'romanized': romanized_mapping.get(
+                            name_mapping.get(source, source), 
+                            name_mapping.get(source, source)
+                        )
+                    })
+                
+                if target not in node_set:
+                    node_set.add(target)
+                    node_ids.append({
+                        'id': target,
+                        'name': name_mapping.get(target, target),
+                        'romanized': romanized_mapping.get(
+                            name_mapping.get(target, target), 
+                            name_mapping.get(target, target)
+                        )
+                    })
             
             # 최종 데이터 구조 생성
-            network_data = {
-                'nodes': node_ids,                    # ID 기반 노드
-                'original_nodes': students,           # 원본 이름
-                'edges': normalized_edges,            # ID 기반 엣지
-                'question_types': questions,
-                'id_mapping': id_mapping,             # 이름 -> ID
-                'name_mapping': name_mapping,         # ID -> 이름
-                'romanized_mapping': romanized_mapping,  # 이름 -> 로마자
-                'reverse_romanized': reverse_romanized   # 로마자 -> 이름
-            }
+            network_data['nodes'] = node_ids
+            network_data['edges'] = normalized_edges
             
-            # Gemini API를 사용하여 추가 데이터 처리 (선택적)
-            if api_enabled and hasattr(self, 'api_manager') and self.api_manager:
-                try:
-                    # Gemini에게 네트워크 구조 개선 요청
-                    prompt = """
-                    다음 네트워크 데이터를 분석하고 개선해주세요:
-                    1. 노드 간의 관계 강도를 1-10 사이로 정규화
-                    2. 각 노드의 중요도를 평가하여 1-10 사이 점수 부여
-                    3. 노드를 최적의 커뮤니티로 그룹화
-                    
-                    노드 목록: {nodes}
-                    엣지 목록: {edges_sample}
-                    
-                    다음 JSON 형식으로 응답해주세요:
-                    {{
-                        "node_scores": {{"노드ID": 점수, ...}},
-                        "edge_weights": {{"출발노드ID-도착노드ID": 가중치, ...}},
-                        "communities": {{"노드ID": 커뮤니티ID, ...}}
-                    }}
-                    """.format(
-                        nodes=node_ids[:50],  # 노드 수가 많을 경우 일부만 전송
-                        edges_sample=normalized_edges[:100]  # 엣지 수가 많을 경우 일부만 전송
-                    )
-                    
-                    gemini_result = self.api_manager.generate_text(prompt)
-                    
-                    # JSON 파싱
-                    import json
-                    import re
-                    
-                    # JSON 부분 추출
-                    json_match = re.search(r'```json\n(.*?)\n```', gemini_result, re.DOTALL)
-                    if json_match:
-                        json_str = json_match.group(1)
-                    else:
-                        json_str = gemini_result
-                    
-                    try:
-                        gemini_data = json.loads(json_str)
-                        # 결과 병합
-                        network_data['gemini_enhanced'] = True
-                        network_data['node_scores'] = gemini_data.get('node_scores', {})
-                        network_data['enhanced_edge_weights'] = gemini_data.get('edge_weights', {})
-                        network_data['gemini_communities'] = gemini_data.get('communities', {})
-                        logger.info("Gemini를 통한 네트워크 데이터 개선 완료")
-                    except json.JSONDecodeError:
-                        logger.warning("Gemini 응답에서 유효한 JSON을 추출할 수 없습니다.")
-                except Exception as e:
-                    logger.warning(f"Gemini를 통한 데이터 처리 중 오류: {str(e)}")
+            # 추가 정보 저장
+            network_data['relationship_columns'] = relationship_columns
             
             return network_data
         
