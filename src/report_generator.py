@@ -15,7 +15,15 @@ from src.data_processor import DataProcessor
 import streamlit.components.v1 as components
 import traceback  # 상단에 traceback 모듈 import 추가
 from PIL import Image
-from streamlit_plotly_events import plotly_events
+# from streamlit_plotly_events import plotly_events - 모듈 없음
+
+# streamlit_plotly_events 모듈 대체 함수
+def plotly_events(fig, **kwargs):
+    """streamlit_plotly_events 모듈 없이 Plotly 차트를 표시하는 대체 함수"""
+    # 일반 plotly_chart로 표시하고 클릭 이벤트 처리 안함
+    st.plotly_chart(fig, use_container_width=True)
+    # 클릭 이벤트 데이터가 없다는 의미로 빈 리스트 반환
+    return []
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
