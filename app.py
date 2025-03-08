@@ -209,23 +209,8 @@ def get_example_description(example_name):
     info = get_example_data_info(example_name)
     return info["description"]
 
-def main():
-    # 전역 CSS 적용
-    apply_global_css()
-    
-    # 필수 디렉토리 확인
-    check_and_create_assets()
-    
-    # 세션 상태 초기화
-    init_session_state()
-    
-    # 페이지 헤더
-    st.markdown("<div class='main-header'>학급 관계 네트워크 분석 시스템</div>", unsafe_allow_html=True)
-    st.markdown("""
-    학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 변환하여 시각화합니다.
-    구글 시트 공유 링크를 입력하거나 예시 데이터를 선택하세요.
-    """)
-    
+def upload_page():
+    """데이터 업로드 및 분석 시작 페이지"""
     # 사이드바
     with st.sidebar:
         st.markdown("### 데이터 입력")
@@ -233,11 +218,11 @@ def main():
         
         # URL 입력 필드 - 고유 키 부여
         sheet_url = st.text_input("구글 시트 공유 링크:", 
-                                value=st.session_state.sheet_url,
+                                value=st.session_state.get('sheet_url', ''),
                                 key="url_input")
         
         # URL 변경 시 세션 상태 업데이트
-        if sheet_url != st.session_state.sheet_url:
+        if sheet_url != st.session_state.get('sheet_url', ''):
             st.session_state.sheet_url = sheet_url
             # URL 변경 시 example_selected 초기화
             st.session_state.example_selected = ""
@@ -266,7 +251,7 @@ def main():
         )
         
         # 예시 선택 시 처리
-        if example_selection != st.session_state.example_selected:
+        if example_selection != st.session_state.get('example_selected', ''):
             st.session_state.example_selected = example_selection
             if example_selection:
                 # 예시 파일 경로 구성
@@ -284,27 +269,13 @@ def main():
         # 분석 버튼
         analyzer_button = st.button(
             "분석 시작", 
-            disabled=not bool(st.session_state.sheet_url),
+            disabled=not bool(st.session_state.get('sheet_url', '')),
             use_container_width=True,
-            key="analyze_button_unique"
+            key="analyze_button"
         )
         
         # 상태 유지와 무관하게 버튼이 작동하도록 조건 수정
         if analyzer_button:
-            st.session_state.button_clicked = True
-        
-        # 세션 초기화 버튼
-        if st.button("🗑️ 초기화", use_container_width=True, key="reset_button"):
-            reset_session()
-            # 이 시점에서 페이지가 리로드됨
-            st.rerun()
-    
-    # 분석 버튼이 클릭되었거나 이미 분석 결과가 있을 때
-    if st.session_state.button_clicked or st.session_state.analyzed:
-        sheet_url = st.session_state.sheet_url
-        
-        # 이미 분석되지 않았거나 URL이 변경된 경우에만 분석 실행
-        if not st.session_state.analyzed or st.session_state.last_analyzed_url != sheet_url:
             with st.spinner("데이터 분석 중입니다..."):
                 try:
                     # 간소화된 진행 표시
@@ -315,13 +286,15 @@ def main():
                     progress_text.text("데이터 로드 중...")
                     progress_bar.progress(25)
                     
-                    # API 매니저 초기화 (Gemini API 설정 유지)
+                    # API 매니저 초기화
                     api_manager = APIManager()
                     data_processor = DataProcessor(api_manager)
                     
                     # 데이터 처리
                     progress_text.text("데이터 처리 중...")
                     progress_bar.progress(50)
+                    
+                    sheet_url = st.session_state.get('sheet_url', '')
                     
                     # 파일 또는 URL에서 데이터 로드
                     if sheet_url.startswith("example"):
@@ -345,52 +318,146 @@ def main():
                         progress_text.empty()
                         return
                     
-                    # 데이터 저장 및 분석
+                    # 네트워크 분석 수행
                     progress_text.text("네트워크 분석 중...")
                     progress_bar.progress(75)
                     
-                    # 세션 상태 업데이트
-                    st.session_state.network_data = network_data
-                    st.session_state.analyzed = True
-                    st.session_state.last_analyzed_url = sheet_url
+                    # 네트워크 분석기 생성
+                    network_analyzer = NetworkAnalyzer(network_data)
                     
-                    # 한글 폰트 설정
-                    set_korean_font()
+                    # 세션 상태에 저장
+                    st.session_state.network_analyzer = network_analyzer
+                    st.session_state.network_data = network_data
                     
                     # 진행 완료
                     progress_bar.progress(100)
                     progress_text.text("분석 완료!")
-                    time.sleep(0.5)  # 잠시 기다려 완료 메시지 표시
+                    time.sleep(0.5)
                     progress_bar.empty()
                     progress_text.empty()
                     
-                    # 분석 결과 표시
-                    show_analysis_results()
+                    # 분석 결과 페이지로 전환
+                    st.session_state.page = 'analysis'
+                    st.experimental_rerun()
                     
                 except Exception as e:
+                    import traceback
+                    logger.error(f"데이터 분석 중 오류: {str(e)}")
+                    logger.error(traceback.format_exc())
                     if 'progress_bar' in locals():
                         progress_bar.empty()
                     if 'progress_text' in locals():
                         progress_text.empty()
-                    handle_error(f"데이터 분석 중 오류 발생: {str(e)}")
-        else:
-            # 이미 분석된 결과가 있는 경우 바로 표시
-            show_analysis_results()
+                    st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
+        
+        # 세션 초기화 버튼
+        if st.button("🗑️ 초기화", use_container_width=True, key="reset_button"):
+            reset_session()
+            st.experimental_rerun()
+    
+    # 메인 컨텐츠
+    st.markdown("## 데이터 업로드")
+    
+    st.info("""
+    **데이터 형식 안내**
+    - 구글 시트 또는 CSV 파일로 데이터를 준비하세요
+    - 첫 번째 열: 학생 ID 또는 이름
+    - 두 번째 열부터: 학생들이 선택한 다른 학생들
+    """)
+    
+    upload_container = st.container()
+    
+    with upload_container:
+        # 파일 업로드 기능
+        uploaded_file = st.file_uploader("Excel 또는 CSV 파일 업로드", type=["xlsx", "csv"])
+        
+        if uploaded_file is not None:
+            try:
+                # 파일 형식에 따라 다른 방식으로 로드
+                if uploaded_file.name.endswith('.csv'):
+                    df = pd.read_csv(uploaded_file)
+                else:
+                    df = pd.read_excel(uploaded_file)
+                
+                # 데이터 미리보기
+                st.subheader("데이터 미리보기")
+                st.dataframe(df.head())
+                
+                # 분석 버튼
+                if st.button("이 데이터로 분석 시작", key="analyze_uploaded_file"):
+                    with st.spinner("데이터 분석 중입니다..."):
+                        try:
+                            # API 및 데이터 처리기 초기화
+                            api_manager = APIManager()
+                            data_processor = DataProcessor(api_manager)
+                            
+                            # 데이터 처리
+                            network_data = data_processor.process_network_data(df)
+                            
+                            if not network_data:
+                                st.error("데이터 처리에 실패했습니다.")
+                                return
+                            
+                            # 네트워크 분석기 생성
+                            network_analyzer = NetworkAnalyzer(network_data)
+                            
+                            # 세션 상태에 저장
+                            st.session_state.network_analyzer = network_analyzer
+                            st.session_state.network_data = network_data
+                            
+                            # 분석 결과 페이지로 전환
+                            st.session_state.page = 'analysis'
+                            st.experimental_rerun()
+                            
+                        except Exception as e:
+                            import traceback
+                            logger.error(f"업로드 파일 분석 중 오류: {str(e)}")
+                            logger.error(traceback.format_exc())
+                            st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
+            
+            except Exception as e:
+                st.error(f"파일 로드 중 오류가 발생했습니다: {str(e)}")
+    
+    # 사용 가이드
+    st.markdown("""
+    ## 간단 사용 가이드
+    
+    1. **데이터 입력**: 구글 시트 링크를 입력하거나 파일 업로드 또는 예시 데이터 선택
+    2. **분석 시작**: 버튼을 클릭하여 네트워크 분석 실행
+    3. **결과 확인**: 생성된 네트워크 그래프와 분석 결과 확인
+    """)
+
+def main():
+    # 전역 CSS 적용
+    apply_global_css()
+    
+    # 필수 디렉토리 확인
+    check_and_create_assets()
+    
+    # 세션 상태 초기화
+    init_session_state()
+    
+    # 페이지 제목
+    st.title("학급 관계 네트워크 분석 시스템")
+    
+    # 설명 텍스트
+    st.markdown("학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 변환하여 시각화합니다. 구글 시트 공유 링크를 입력하거나 엑셀 데이터를 선택하세요.")
+    
+    # 페이지 라우팅
+    if st.session_state.page == 'upload':
+        upload_page()
+    elif st.session_state.page == 'analysis':
+        show_analysis_results()
     else:
-        # 분석 전 간략한 가이드 표시
-        st.info("데이터 분석을 시작하려면 왼쪽 사이드바에서 데이터를 선택하고 '분석 시작' 버튼을 클릭하세요.")
+        st.session_state.page = 'upload'
+        st.experimental_rerun()
         
-        # 사용 방법 간략화
-        st.markdown("""
-        ## 간단 사용 가이드
-        
-        1. **데이터 입력**: 구글 시트 링크를 입력하거나 예시 데이터 선택
-        2. **분석 시작**: 버튼을 클릭하여 네트워크 분석 실행
-        3. **결과 확인**: 생성된 네트워크 그래프와 분석 결과 확인
-        """)
-        
-        # 푸터 표시
-        show_footer()
+    # 푸터
+    st.markdown("""
+    <div style="text-align: center; margin-top: 40px; color: #888;">
+        <p>© 2023 학급 관계 네트워크 분석 시스템 | 소셜 네트워크 분석 도구</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # 분석 결과 표시 함수
 def show_analysis_results():
@@ -415,9 +482,15 @@ def show_analysis_results():
         # 결과가 있는지 확인
         if 'network_analyzer' not in st.session_state or not st.session_state.network_analyzer:
             st.error("분석 결과가 없습니다. 먼저 데이터를 업로드하고 분석을 실행해주세요.")
-            if st.button("데이터 업로드 화면으로 돌아가기"):
+            # 버튼 클릭 처리 방식 변경
+            if st.button("데이터 업로드 화면으로 돌아가기", key="go_to_upload"):
+                # 세션 상태 초기화를 먼저 수행
+                for key in list(st.session_state.keys()):
+                    if key not in ['page', 'go_to_upload']:
+                        del st.session_state[key]
+                # 페이지 상태 변경
                 st.session_state.page = 'upload'
-                st.rerun()
+                st.experimental_rerun()
             return
 
         # 분석기 가져오기
