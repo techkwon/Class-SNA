@@ -100,6 +100,10 @@ def apply_global_css():
 
 def init_session_state():
     """세션 상태 초기화 (없는 경우에만)"""
+    # 가장 필수적인 page 상태 먼저 초기화 (항상 존재해야 함)
+    if 'page' not in st.session_state:
+        st.session_state.page = 'upload'
+    
     # 기본 상태 초기화
     if 'initialized' not in st.session_state:
         # 분석 관련 상태
@@ -127,18 +131,18 @@ def init_session_state():
         logger.info("세션 상태 초기화 완료")
 
 def reset_session():
-    """모든 세션 상태를 초기화합니다"""
-    # 세션 상태의 모든 키 삭제
+    """세션 상태 완전 초기화"""
+    # 모든 세션 상태 키 삭제
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     
-    # 초기화 플래그 설정
-    st.session_state.initialized = False
+    # 반드시 page 키는 유지 (없으면 생성)
+    st.session_state.page = 'upload'
     
-    # 다시 초기화 실행
+    # 나머지는 init_session_state에서 처리
     init_session_state()
     
-    logger.info("세션 상태 초기화됨")
+    logger.info("세션 상태 완전 초기화 완료")
 
 def get_example_data_files():
     """data 디렉토리에서 예시 데이터 파일 목록을 가져옵니다"""
@@ -427,37 +431,75 @@ def upload_page():
     3. **결과 확인**: 생성된 네트워크 그래프와 분석 결과 확인
     """)
 
+def check_and_create_assets():
+    """필요한 디렉토리와 자산 파일들을 확인하고 생성합니다"""
+    try:
+        # 기본 디렉토리 확인 및 생성
+        dirs = ['data', 'temp', 'assets']
+        for directory in dirs:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+                logger.info(f"디렉토리 생성: {directory}")
+    except Exception as e:
+        logger.warning(f"자산 디렉토리 확인 중 오류: {str(e)}")
+
 def main():
-    # 전역 CSS 적용
-    apply_global_css()
-    
-    # 필수 디렉토리 확인
-    check_and_create_assets()
-    
-    # 세션 상태 초기화
-    init_session_state()
-    
-    # 페이지 제목
-    st.title("학급 관계 네트워크 분석 시스템")
-    
-    # 설명 텍스트
-    st.markdown("학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 변환하여 시각화합니다. 구글 시트 공유 링크를 입력하거나 엑셀 데이터를 선택하세요.")
-    
-    # 페이지 라우팅
-    if st.session_state.page == 'upload':
-        upload_page()
-    elif st.session_state.page == 'analysis':
-        show_analysis_results()
-    else:
-        st.session_state.page = 'upload'
-        st.experimental_rerun()
+    try:
+        # 전역 CSS 적용
+        apply_global_css()
         
-    # 푸터
-    st.markdown("""
-    <div style="text-align: center; margin-top: 40px; color: #888;">
-        <p>© 2023 학급 관계 네트워크 분석 시스템 | 소셜 네트워크 분석 도구</p>
-    </div>
-    """, unsafe_allow_html=True)
+        # 필수 디렉토리 확인
+        check_and_create_assets()
+        
+        # 세션 상태 초기화
+        init_session_state()
+        
+        # 페이지 제목
+        st.title("학급 관계 네트워크 분석 시스템")
+        
+        # 설명 텍스트
+        st.markdown("학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 변환하여 시각화합니다. 구글 시트 공유 링크를 입력하거나 엑셀 데이터를 선택하세요.")
+        
+        # 페이지 라우팅 - 세션 상태 속성 접근 전에 안전하게 확인
+        try:
+            current_page = st.session_state.get('page', 'upload')
+        except Exception:
+            # 세션 상태 접근 실패 시 기본값으로 설정
+            current_page = 'upload'
+            st.session_state.page = current_page
+            
+        # 페이지 라우팅
+        if current_page == 'upload':
+            upload_page()
+        elif current_page == 'analysis':
+            show_analysis_results()
+        else:
+            st.session_state.page = 'upload'
+            st.experimental_rerun()
+            
+        # 푸터
+        st.markdown("""
+        <div style="text-align: center; margin-top: 40px; color: #888;">
+            <p>© 2023 학급 관계 네트워크 분석 시스템 | 소셜 네트워크 분석 도구</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    except Exception as e:
+        # 전역 예외 처리
+        st.error(f"애플리케이션 실행 중 오류가 발생했습니다: {str(e)}")
+        if 'page' not in st.session_state:
+            st.session_state.page = 'upload'
+        
+        # 로그에 오류 기록
+        import traceback
+        logger.error(f"애플리케이션 오류: {str(e)}")
+        logger.error(traceback.format_exc())
+        
+        # 초기화 버튼 제공
+        if st.button("앱 초기화"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.experimental_rerun()
 
 # 분석 결과 표시 함수
 def show_analysis_results():
@@ -479,12 +521,13 @@ def show_analysis_results():
             unsafe_allow_html=True,
         )
         
-        # 결과가 있는지 확인
-        if 'network_analyzer' not in st.session_state or not st.session_state.network_analyzer:
+        # 결과가 있는지 안전하게 확인
+        network_analyzer = st.session_state.get('network_analyzer')
+        if not network_analyzer:
             st.error("분석 결과가 없습니다. 먼저 데이터를 업로드하고 분석을 실행해주세요.")
             # 버튼 클릭 처리 방식 변경
             if st.button("데이터 업로드 화면으로 돌아가기", key="go_to_upload"):
-                # 세션 상태 초기화를 먼저 수행
+                # 세션 상태 안전하게 초기화
                 for key in list(st.session_state.keys()):
                     if key not in ['page', 'go_to_upload']:
                         del st.session_state[key]
@@ -494,7 +537,7 @@ def show_analysis_results():
             return
 
         # 분석기 가져오기
-        analyzer = st.session_state.network_analyzer
+        analyzer = network_analyzer
 
         # 보고서 생성기 초기화
         if 'report_generator' not in st.session_state:
