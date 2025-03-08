@@ -478,16 +478,14 @@ class NetworkVisualizer:
             edge_y = []
             edge_info = []
             
-            # 엣지 두께 데이터
-            edge_width = []
+            # 가중치별 엣지 그룹화 (각 가중치별로 별도의 Scatter를 만들기 위함)
+            edge_groups = {}  # 가중치별 엣지 정보 저장 (weight -> [x, y, info])
             
             # 엣지 그리기
             for u, v, data in G.edges(data=True):
                 try:
                     x0, y0 = pos[u]
                     x1, y1 = pos[v]
-                    edge_x.extend([x0, x1, None])
-                    edge_y.extend([y0, y1, None])
                     
                     # 엣지 정보
                     source_name = self._get_original_name(u) if hasattr(self, '_get_original_name') else str(u)
@@ -506,28 +504,54 @@ class NetworkVisualizer:
                         
                     # 두께 설정 (최소 1, 최대 5)
                     thickness = max(1, min(1 + weight * 0.5, 5))
-                    edge_width.extend([thickness, thickness, 0])
+                    thickness_rounded = round(thickness * 2) / 2  # 0.5 단위로 반올림
                     
-                    # 엣지 정보 (호버 텍스트)
+                    # 정보 텍스트
                     info = f"{source_name} → {target_name}"
                     if weight > 1:
                         info += f"<br>가중치: {weight}"
                     
-                    edge_info.extend([info, info, None])
+                    # 가중치 그룹에 추가
+                    if thickness_rounded not in edge_groups:
+                        edge_groups[thickness_rounded] = {
+                            'x': [],
+                            'y': [],
+                            'info': []
+                        }
+                    
+                    # 해당 가중치 그룹에 좌표와 정보 추가
+                    edge_groups[thickness_rounded]['x'].extend([x0, x1, None])
+                    edge_groups[thickness_rounded]['y'].extend([y0, y1, None])
+                    edge_groups[thickness_rounded]['info'].extend([info, info, None])
+                    
                 except Exception as e:
                     # 엣지 그리기 오류 무시
                     logger.warning(f"엣지 {u}-{v} 처리 중 오류: {str(e)}")
                     continue
             
-            # 엣지 트레이스
-            edge_trace = go.Scatter(
-                x=edge_x, y=edge_y,
-                line=dict(width=edge_width, color='rgba(150, 150, 150, 0.6)'),
-                hoverinfo='text',
-                text=edge_info,
-                mode='lines'
-            )
+            # 엣지 트레이스 (가중치별로 별도 생성)
+            edge_traces = []
+            for thickness, group in edge_groups.items():
+                # 해당 두께의 엣지 Scatter 생성
+                edge_trace = go.Scatter(
+                    x=group['x'], 
+                    y=group['y'],
+                    line=dict(width=thickness, color='rgba(150, 150, 150, 0.6)'),
+                    hoverinfo='text',
+                    text=group['info'],
+                    mode='lines',
+                    name=f'연결 (두께: {thickness})'
+                )
+                edge_traces.append(edge_trace)
             
+            # 엣지가 없는 경우 빈 트레이스 추가
+            if not edge_traces:
+                edge_traces = [go.Scatter(
+                    x=[], y=[],
+                    line=dict(width=1, color='rgba(150, 150, 150, 0.6)'),
+                    mode='lines'
+                )]
+                
             # 노드 데이터 준비
             node_x = []
             node_y = []
@@ -629,11 +653,11 @@ class NetworkVisualizer:
             
             # 그래프 레이아웃 설정
             fig = go.Figure(
-                data=[edge_trace, node_trace],
+                data=[*edge_traces, node_trace],
                 layout=go.Layout(
                     title='<b>학급 관계 네트워크</b>',
                     titlefont=dict(size=18, family="'Noto Sans KR', sans-serif"),
-                    showlegend=False,
+                    showlegend=False,  # 범례 숨김
                     hovermode='closest',
                     margin=dict(b=20, l=20, r=20, t=40),
                     annotations=[],
@@ -787,6 +811,7 @@ class NetworkVisualizer:
             if community_data:
                 unique_communities = set(community_data.values())
                 colors = plt.cm.tab20(np.linspace(0, 1, len(unique_communities)))
+                
                 community_colors = {comm: f"rgba({int(r*255)},{int(g*255)},{int(b*255)},{a})" 
                                     for comm, (r, g, b, a) in zip(unique_communities, colors)}
                 
