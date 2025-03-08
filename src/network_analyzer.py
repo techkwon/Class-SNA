@@ -362,4 +362,74 @@ class NetworkAnalyzer:
             
         except Exception as e:
             logger.error(f"고립 노드 식별 중 오류 발생: {str(e)}")
-            return [] 
+            return []
+    
+    def generate_summary(self):
+        """네트워크 분석 요약 텍스트 생성"""
+        try:
+            if self.graph is None or self.graph.number_of_nodes() == 0:
+                return "네트워크 데이터가 없습니다."
+            
+            # 기본 통계
+            num_nodes = self.graph.number_of_nodes()
+            num_edges = self.graph.number_of_edges()
+            density = nx.density(self.graph)
+            
+            # 중심성 지표 분석
+            if not self.metrics:
+                self.calculate_centrality()
+            
+            # 가장 중요한 노드 식별
+            top_nodes = {}
+            if 'in_degree' in self.metrics:
+                in_degree = self.metrics['in_degree']
+                top_in = sorted(in_degree.items(), key=lambda x: x[1], reverse=True)[:3]
+                top_nodes['인기도'] = [f"{node} ({value:.3f})" for node, value in top_in]
+            
+            if 'betweenness' in self.metrics:
+                betweenness = self.metrics['betweenness']
+                top_betw = sorted(betweenness.items(), key=lambda x: x[1], reverse=True)[:3]
+                top_nodes['매개 중심성'] = [f"{node} ({value:.3f})" for node, value in top_betw]
+            
+            # 커뮤니티 정보
+            if self.communities is None:
+                self.detect_communities()
+            
+            community_info = {}
+            if self.communities:
+                for comm_id, members in self.communities.items():
+                    community_info[comm_id] = len(members)
+            
+            # 요약 텍스트 생성
+            summary = []
+            summary.append(f"### 네트워크 기본 정보")
+            summary.append(f"- **학생 수**: {num_nodes}명")
+            summary.append(f"- **관계 수**: {num_edges}개")
+            summary.append(f"- **네트워크 밀도**: {density:.4f}")
+            
+            if top_nodes:
+                summary.append(f"\n### 주요 학생 분석")
+                
+                if '인기도' in top_nodes:
+                    summary.append(f"- **인기가 가장 많은 학생**:")
+                    for node in top_nodes['인기도']:
+                        summary.append(f"  - {node}")
+                
+                if '매개 중심성' in top_nodes:
+                    summary.append(f"- **매개 역할이 큰 학생**:")
+                    for node in top_nodes['매개 중심성']:
+                        summary.append(f"  - {node}")
+            
+            if community_info:
+                summary.append(f"\n### 그룹 분석")
+                summary.append(f"- **발견된 그룹 수**: {len(community_info)}개")
+                
+                for comm_id, size in community_info.items():
+                    members = self.communities[comm_id]
+                    summary.append(f"- **그룹 {comm_id}**: {size}명 ({', '.join(members[:5])}{', ...' if len(members) > 5 else ''})")
+            
+            return "\n".join(summary)
+            
+        except Exception as e:
+            logger.error(f"네트워크 요약 생성 중 오류: {str(e)}")
+            return "네트워크 요약을 생성하는 중 오류가 발생했습니다." 
