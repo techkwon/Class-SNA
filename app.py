@@ -539,9 +539,25 @@ def show_analysis_results():
         # 분석기 가져오기
         analyzer = network_analyzer
 
+        # 시각화 객체 생성 또는 가져오기
+        if 'visualizer' not in st.session_state or not st.session_state.visualizer:
+            try:
+                from src.visualizer import NetworkVisualizer
+                # 시각화 객체 생성
+                visualizer = NetworkVisualizer(analyzer=analyzer)
+                st.session_state.visualizer = visualizer
+            except Exception as e:
+                logger.error(f"시각화 객체 생성 중 오류: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # 오류 발생 시 기본 시각화 객체 없이 진행 시도
+                visualizer = None
+        else:
+            visualizer = st.session_state.visualizer
+
         # 보고서 생성기 초기화
         if 'report_generator' not in st.session_state:
-            st.session_state.report_generator = ReportGenerator(analyzer)
+            st.session_state.report_generator = ReportGenerator(analyzer, visualizer)
         report_generator = st.session_state.report_generator
 
         # 상단 메뉴 탭
