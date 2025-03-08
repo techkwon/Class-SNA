@@ -621,9 +621,6 @@ class NetworkVisualizer:
             }
             """)
             
-            # 커뮤니티 색상 설정 (각 그룹별 색상)
-            community_colors = {} 
-            
             # 선명한 색상 팔레트 (색약자도 구분 가능하도록)
             vibrant_colors = {
                 0: "#1f77b4",  # 파랑
@@ -638,126 +635,155 @@ class NetworkVisualizer:
                 9: "#17becf"   # 청록
             }
             
-            # 커뮤니티 색상 설정
-            colors = self.analyzer.get_community_colors()
+            # 커뮤니티 정보 가져오기 (안전하게)
+            try:
+                communities = self.analyzer.get_communities()
+            except Exception as e:
+                logger.warning(f"커뮤니티 정보를 가져오는 중 오류: {str(e)}")
+                communities = {}
             
             # 노드 추가 (학생)
             for node in G.nodes():
-                # 노드 속성
-                node_attr = G.nodes[node]
-                
-                # 노드 이름 설정 - 항상 로마자 변환 적용
-                node_name = self._get_display_label(node, use_romanized=True)
-                
-                # 원본 이름 (한글) - 툴팁에만 사용
-                original_name = str(node)
-                
-                # 노드 크기 (인기도에 따라)
-                if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
-                    # in_degree 값이 리스트인 경우 처리
-                    in_degree = self.metrics['in_degree'][node]
-                    if isinstance(in_degree, list):
-                        # 리스트인 경우 첫 번째 값 사용
-                        if len(in_degree) > 0:
-                            in_degree = in_degree[0]
-                        else:
-                            in_degree = 0
+                try:
+                    # 노드 속성
+                    node_attr = G.nodes[node]
                     
-                    # 리스트가 아닌 경우 그대로 사용
-                    try:
-                        size = 20 + float(in_degree) * 30
-                        size = min(size, 75)  # 최대 크기 제한
-                    except (TypeError, ValueError):
-                        # 숫자로 변환할 수 없는 경우
-                        size = 20
-                else:
-                    size = 20
-                
-                # 커뮤니티 정보 (그룹)
-                communities = self.analyzer.get_communities()
-                community_id = None
-                for comm_id, members in communities.items():
-                    if node in members:
-                        community_id = comm_id
-                        break
-                
-                # 색상 결정
-                if community_id is not None and community_id in vibrant_colors:
-                    color = vibrant_colors[community_id]
-                else:
-                    # community_id가 리스트인 경우
-                    if isinstance(community_id, list):
-                        # 첫 번째 값만 사용
-                        if len(community_id) > 0:
-                            comm_id = community_id[0]
-                            # 정수로 변환 시도
-                            try:
-                                comm_id = int(comm_id) % len(vibrant_colors)
-                                color = vibrant_colors[comm_id]
-                            except (ValueError, TypeError):
-                                color = "#7f7f7f"  # 기본 회색
-                        else:
-                            color = "#7f7f7f"  # 기본 회색
-                    else:
-                        # 정수로 변환 시도
+                    # 노드 이름 설정 - 항상 로마자 변환 적용
+                    node_name = self._get_display_label(node, use_romanized=True)
+                    
+                    # 원본 이름 (한글) - 툴팁에만 사용
+                    original_name = str(node)
+                    
+                    # 노드 크기 (인기도에 따라)
+                    size = 20  # 기본 크기
+                    if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
+                        # in_degree 값이 리스트인 경우 처리
+                        in_degree = self.metrics['in_degree'][node]
+                        
+                        # 타입 처리
+                        if isinstance(in_degree, list):
+                            in_degree = in_degree[0] if in_degree else 0
+                        
+                        # 크기 계산
                         try:
-                            if community_id is not None:
-                                comm_id = int(community_id) % len(vibrant_colors)
-                                color = vibrant_colors[comm_id]
-                            else:
-                                color = "#7f7f7f"  # 기본 회색
+                            size = 20 + float(in_degree) * 30
+                            size = min(size, 75)  # 최대 크기 제한
                         except (ValueError, TypeError):
-                            color = "#7f7f7f"  # 기본 회색
-                
-                # 툴팁 생성
-                tooltip = f"이름: {original_name} ({node_name})\n"
-                
-                if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
-                    tooltip += f"인기도: {self.metrics['in_degree'][node]:.3f}\n"
-                
-                if 'betweenness' in self.metrics and node in self.metrics['betweenness']:
-                    tooltip += f"매개 중심성: {self.metrics['betweenness'][node]:.3f}\n"
-                
-                if community_id is not None:
-                    tooltip += f"그룹: {community_id}\n"
-                
-                # 노드 추가
-                net.add_node(
-                    node,  # 원본 노드 ID 사용 (내부 식별용)
-                    label=node_name,  # 로마자 이름 표시
-                    title=tooltip,  # 툴팁에 원본 이름 포함
-                    size=size,
-                    color=color
-                )
+                            size = 20
+                    
+                    # 커뮤니티 ID 및 색상 결정
+                    color = "#7f7f7f"  # 기본 회색
+                    community_id = None
+                    
+                    # 커뮤니티 멤버십 확인
+                    if communities:
+                        for comm_id, members in communities.items():
+                            if node in members:
+                                community_id = comm_id
+                                break
+                    
+                    # 색상 할당 로직 (모든 타입 처리)
+                    if community_id is not None:
+                        # 1. 직접 vibrant_colors에서 찾기
+                        if community_id in vibrant_colors:
+                            color = vibrant_colors[community_id]
+                        else:
+                            # 2. 리스트인 경우
+                            if isinstance(community_id, list):
+                                comm_id = community_id[0] if community_id else 0
+                            else:
+                                comm_id = community_id
+                                
+                            # 3. 정수 변환 시도
+                            try:
+                                # 정수로 변환 후 안전하게 모듈로 연산
+                                color_idx = int(str(comm_id).strip()) if not isinstance(comm_id, int) else comm_id
+                                color_idx = color_idx % len(vibrant_colors)
+                                color = vibrant_colors[color_idx]
+                            except (ValueError, TypeError):
+                                # 변환 실패 시 해시 기반 색상 할당
+                                hash_val = hash(str(comm_id)) % len(vibrant_colors)
+                                color = vibrant_colors[hash_val]
+                    
+                    # 툴팁 생성 (모든 값의 타입 안전하게 처리)
+                    tooltip = f"이름: {original_name} ({node_name})\n"
+                    
+                    # 중심성 지표 처리 함수
+                    def format_metric(metric_name, node_id):
+                        if metric_name in self.metrics and node_id in self.metrics[metric_name]:
+                            value = self.metrics[metric_name][node_id]
+                            
+                            # 리스트 처리
+                            if isinstance(value, list):
+                                value = value[0] if value else 0
+                                
+                            # 숫자 형식화
+                            try:
+                                return f"{metric_name}: {float(value):.3f}\n"
+                            except (ValueError, TypeError):
+                                return f"{metric_name}: {value}\n"
+                        return ""
+                    
+                    # 각 중심성 지표 추가
+                    tooltip += format_metric("인기도", node)
+                    tooltip += format_metric("매개 중심성", node)
+                    
+                    # 커뮤니티 정보 추가
+                    if community_id is not None:
+                        tooltip += f"그룹: {community_id}\n"
+                    
+                    # 노드 추가
+                    net.add_node(
+                        node,  # 원본 노드 ID 사용 (내부 식별용)
+                        label=node_name,  # 로마자 이름 표시
+                        title=tooltip,  # 툴팁에 원본 이름 포함
+                        size=size,
+                        color=color
+                    )
+                except Exception as e:
+                    logger.warning(f"노드 '{node}' 추가 중 오류: {str(e)}")
+                    # 노드 추가 실패 시 기본 노드로 추가
+                    net.add_node(
+                        node,
+                        label=str(node),
+                        size=20,
+                        color="#cccccc"
+                    )
             
             # 엣지 추가 (관계)
             for source, target in G.edges():
-                # 엣지 추가
-                net.add_edge(
-                    source,
-                    target,
-                    arrows="to",  # 화살표 방향
-                    width=1,  # 선 굵기
-                    color="#848484",  # 회색 선
-                    smooth={"enabled": True, "type": "dynamic"}  # 곡선형 엣지
-                )
+                try:
+                    # 엣지 추가
+                    net.add_edge(
+                        source,
+                        target,
+                        arrows="to",  # 화살표 방향
+                        width=1,  # 선 굵기
+                        color="#848484",  # 회색 선
+                        smooth={"enabled": True, "type": "dynamic"}  # 곡선형 엣지
+                    )
+                except Exception as e:
+                    logger.warning(f"엣지 '{source}->{target}' 추가 중 오류: {str(e)}")
             
             # 레이아웃 설정
-            if layout == "circular":
-                net.set_options('{"layout": {"improvedLayout": true, "hierarchical": {"enabled": false}}}')
-                # 원형 레이아웃 적용 (PyVis에서는 물리 엔진 끄고 직접 좌표 설정)
-                pos = nx.circular_layout(G)
-                for node_id, coords in pos.items():
-                    net.get_node(node_id)['x'] = int(coords[0] * 1000)
-                    net.get_node(node_id)['y'] = int(coords[1] * 1000)
-                    net.get_node(node_id)['physics'] = False
-            
-            elif layout == "kamada":
-                # 기본 레이아웃 사용하고 초기 위치 Kamada-Kawai로 설정
-                pos = nx.kamada_kawai_layout(G)
-                for node_id, coords in pos.items():
-                    net.get_node(node_id)['x'] = int(coords[0] * 1000)
-                    net.get_node(node_id)['y'] = int(coords[1] * 1000)
+            try:
+                if layout == "circular":
+                    net.set_options('{"layout": {"improvedLayout": true, "hierarchical": {"enabled": false}}}')
+                    # 원형 레이아웃 적용 (PyVis에서는 물리 엔진 끄고 직접 좌표 설정)
+                    pos = nx.circular_layout(G)
+                    for node_id, coords in pos.items():
+                        net.get_node(node_id)['x'] = int(coords[0] * 1000)
+                        net.get_node(node_id)['y'] = int(coords[1] * 1000)
+                        net.get_node(node_id)['physics'] = False
+                
+                elif layout == "kamada":
+                    # 기본 레이아웃 사용하고 초기 위치 Kamada-Kawai로 설정
+                    pos = nx.kamada_kawai_layout(G)
+                    for node_id, coords in pos.items():
+                        net.get_node(node_id)['x'] = int(coords[0] * 1000)
+                        net.get_node(node_id)['y'] = int(coords[1] * 1000)
+            except Exception as e:
+                logger.warning(f"레이아웃 '{layout}' 적용 중 오류: {str(e)}")
             
             # 한글 폰트 적용
             net = apply_korean_font_to_pyvis(net)
@@ -829,9 +855,16 @@ class NetworkVisualizer:
             # 컬러 팔레트 (구글 색상 사용)
             colors = ['#4285F4', '#EA4335', '#34A853', '#FBBC05', '#8E24AA', '#16A085']
             
+            # Y축 레이블이 카테고리형 데이터가 아닌 숫자로 처리되는 문제 해결
+            y_pos = np.arange(len(df))  # 숫자 위치값 생성
+            
             # 반전된 순서로 그래프 생성 (위에서 아래로 내림차순)
-            bars = ax.barh(df['display_name'], df['value'], 
+            bars = ax.barh(y_pos, df['value'], 
                          color=[colors[i % len(colors)] for i in range(len(df))])
+            
+            # Y축 레이블 설정 (위치에 표시 이름 매핑)
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(df['display_name'])
             
             # 그래프 스타일링 
             ax.set_xlabel('Centrality Value', fontsize=12)
