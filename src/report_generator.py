@@ -1147,7 +1147,6 @@ class ReportGenerator:
             중심성 지표는 네트워크에서 각 학생의 중요도를 나타내는 수치입니다:
             
             - **인기도(In-Degree)**: 다른 학생들에게 선택된 횟수입니다. 높을수록 더 인기가 많습니다.
-            - **매개 중심성(Betweenness)**: 학생이 다른 학생들을 연결하는 다리 역할을 하는 정도
             - **중재자 역할(매개 중심성)**: 서로 다른 그룹을 연결하는 다리 역할입니다. 높을수록 정보 전달자 역할을 합니다.
             - **정보 접근성(근접 중심성)**: 다른 모든 학생들과의 근접도입니다. 높을수록 전체 네트워크에서 정보를 빠르게 얻을 수 있습니다.
             """)
@@ -1156,6 +1155,22 @@ class ReportGenerator:
             metric_options = ['in_degree', 'betweenness']
             metric_names = {'in_degree': '인기도', 'betweenness': '매개 중심성'}
             
+            # 세션 상태 초기화
+            if 'centrality_metric' not in st.session_state:
+                st.session_state.centrality_metric = 'in_degree'
+            
+            if 'top_n_slider' not in st.session_state:
+                st.session_state.top_n_slider = 10
+                
+            # 선택 변경 콜백 함수
+            def on_metric_change():
+                # 상태 유지를 위한 빈 콜백
+                pass
+                
+            def on_top_n_change():
+                # 상태 유지를 위한 빈 콜백
+                pass
+            
             col1, col2 = st.columns([3, 1])
             
             with col1:
@@ -1163,11 +1178,19 @@ class ReportGenerator:
                     "분석할 중심성 지표 선택:", 
                     options=metric_options,
                     format_func=lambda x: metric_names.get(x, x),
-                    key='centrality_metric'
+                    key='centrality_metric',
+                    on_change=on_metric_change
                 )
             
             with col2:
-                top_n = st.slider("표시할 학생 수:", min_value=3, max_value=20, value=10, key='top_n_slider')
+                top_n = st.slider(
+                    "표시할 학생 수:", 
+                    min_value=3, 
+                    max_value=20, 
+                    value=st.session_state.top_n_slider,
+                    key='top_n_slider',
+                    on_change=on_top_n_change
+                )
             
             # 중심성 시각화
             st.markdown(f"### 상위 {top_n}명 {metric_names.get(selected_metric, selected_metric)} 분석")
@@ -1179,12 +1202,69 @@ class ReportGenerator:
             
             # 중심성 데이터 표시
             metrics_df = pd.DataFrame()
-            for name, values in self.metrics.items():
-                metrics_df[metric_names.get(name, name)] = pd.Series(values)
             
-            st.write("#### 전체 중심성 지표 데이터")
-            st.dataframe(metrics_df)
+            # 이름 매핑을 위한 준비
+            name_mapping = {}
+            if hasattr(self.analyzer, 'name_mapping'):
+                name_mapping = self.analyzer.name_mapping
+            elif 'name_mapping' in st.session_state:
+                name_mapping = st.session_state.name_mapping
+                
+            # 원본 노드 목록
+            node_ids = list(self.metrics.get('in_degree', {}).keys())
             
+            # 데이터 구성
+            nodes_data = []
+            for node_id in node_ids:
+                # 노드 이름 추출
+                original_name = name_mapping.get(str(node_id), str(node_id))
+                
+                # 중심성 지표 값 추출
+                row_data = {"학생 이름": original_name}
+                
+                for metric in metric_options:
+                    metric_name = metric_names.get(metric, metric)
+                    if metric in self.metrics and node_id in self.metrics[metric]:
+                        value = self.metrics[metric][node_id]
+                        
+                        # 리스트 타입 처리
+                        if isinstance(value, list):
+                            value = value[0] if value else 0
+                            
+                        try:
+                            row_data[metric_name] = float(value)
+                        except (ValueError, TypeError):
+                            row_data[metric_name] = 0
+                    else:
+                        row_data[metric_name] = 0
+                        
+                nodes_data.append(row_data)
+                
+            # 데이터프레임 생성 및 정렬
+            if nodes_data:
+                result_df = pd.DataFrame(nodes_data)
+                metric_col = metric_names.get(selected_metric, selected_metric)
+                result_df = result_df.sort_values(by=metric_col, ascending=False)
+                
+                # 소수점 자리 포맷팅
+                for col in result_df.columns:
+                    if col != "학생 이름":
+                        result_df[col] = result_df[col].map(lambda x: f"{x:.4f}")
+                
+                st.write("#### 전체 중심성 지표 데이터")
+                st.dataframe(result_df, use_container_width=True)
+                
+                # CSV 다운로드 버튼
+                csv = result_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 중심성 지표 CSV 다운로드",
+                    data=csv,
+                    file_name="centrality_metrics.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.warning("중심성 지표 데이터를 표시할 수 없습니다.")
+        
         except Exception as e:
             logger.error(f"중심성 분석 표시 중 오류: {str(e)}")
             st.error("중심성 분석 결과를 표시하는 중 오류가 발생했습니다.")
@@ -1269,7 +1349,7 @@ class ReportGenerator:
     def show_interactive_network(self, network_data):
         """인터랙티브 네트워크 시각화"""
         try:
-            st.markdown("## 대화형 관계망 시각화")
+            # 제목은 이미 탭 헤더에 있으므로 제거하고 설명만 표시
             st.write("""
             아래 그래프는 마우스로 조작할 수 있습니다:
             - **드래그**: 학생(노드)을 끌어서 이동할 수 있습니다
@@ -1278,16 +1358,17 @@ class ReportGenerator:
             """)
             
             # Plotly 그래프 생성
+            st.subheader("정적 네트워크 뷰")
             fig = self.visualizer.create_plotly_network()
             st.plotly_chart(fig, use_container_width=True)
             
             # PyVis 네트워크 생성 (인터랙티브)
-            st.write("#### 인터랙티브 네트워크")
+            st.subheader("인터랙티브 네트워크")
             st.write("""
-            아래 그래프는 마우스로 조작할 수 있습니다:
-            - **드래그**: 학생(노드)을 끌어서 이동할 수 있습니다
-            - **확대/축소**: 마우스 휠로 확대하거나 축소할 수 있습니다
-            - **호버**: 마우스를 올리면 학생 정보가 표시됩니다
+            이 네트워크는 실시간으로 상호작용이 가능합니다:
+            - **노드 끌기**: 학생을 드래그하여 위치를 변경할 수 있습니다
+            - **확대/축소**: 마우스 휠로 줌인/줌아웃이 가능합니다
+            - **정보 보기**: 학생에게 마우스를 올리면 상세 정보가 표시됩니다
             """)
             
             # HTML 코드를 직접 받아옴 (파일 사용하지 않음)
@@ -1330,4 +1411,4 @@ class ReportGenerator:
             
         except Exception as e:
             logger.error(f"인터랙티브 네트워크 표시 중 오류: {str(e)}")
-            st.error("인터랙티브 네트워크 시각화에 실패했습니다.") 
+            st.error("인터랙티브 네트워크 시각화에 실패했습니다.")

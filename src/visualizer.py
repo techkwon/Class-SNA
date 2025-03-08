@@ -655,14 +655,14 @@ class NetworkVisualizer:
             # 노드 추가 (학생)
             for node in G.nodes():
                 try:
-                    # 노드 속성
-                    node_attr = G.nodes[node]
+                    # 노드 이름 얻기 (ID → 실제 이름)
+                    original_name = self._get_original_name(node)
                     
-                    # 노드 이름 설정 - 항상 로마자 변환 적용
-                    node_name = self._get_display_label(node, use_romanized=True)
+                    # 노드 레이블은 항상 실제 학생 이름으로 표시
+                    node_label = original_name
                     
-                    # 원본 이름 (한글) - 툴팁에만 사용
-                    original_name = str(node)
+                    # 로마자 변환 이름 (영문 환경용)
+                    roman_name = self._get_display_label(node, use_romanized=True)
                     
                     # 노드 크기 (인기도에 따라)
                     size = 20  # 기본 크기
@@ -716,7 +716,7 @@ class NetworkVisualizer:
                                 color = vibrant_colors[hash_val]
                     
                     # 툴팁 생성 (모든 값의 타입 안전하게 처리)
-                    tooltip = f"이름: {original_name} ({node_name})\n"
+                    tooltip = f"이름: {original_name}"
                     
                     # 중심성 지표 처리 함수
                     def format_metric(metric_name, node_id):
@@ -729,24 +729,29 @@ class NetworkVisualizer:
                                 
                             # 숫자 형식화
                             try:
-                                return f"{metric_name}: {float(value):.3f}\n"
+                                return f"{metric_name}: {float(value):.3f}"
                             except (ValueError, TypeError):
-                                return f"{metric_name}: {value}\n"
+                                return f"{metric_name}: {value}"
                         return ""
                     
                     # 각 중심성 지표 추가
-                    tooltip += format_metric("인기도", node)
-                    tooltip += format_metric("매개 중심성", node)
+                    in_degree_metric = format_metric("인기도", node)
+                    if in_degree_metric:
+                        tooltip += f"\n{in_degree_metric}"
+                        
+                    betweenness_metric = format_metric("매개 중심성", node)
+                    if betweenness_metric:
+                        tooltip += f"\n{betweenness_metric}"
                     
                     # 커뮤니티 정보 추가
                     if community_id is not None:
-                        tooltip += f"그룹: {community_id}\n"
+                        tooltip += f"\n그룹: {community_id}"
                     
-                    # 노드 추가
+                    # 노드 추가 - 학생 실명 표시
                     net.add_node(
-                        node,  # 원본 노드 ID 사용 (내부 식별용)
-                        label=node_name,  # 로마자 이름 표시
-                        title=tooltip,  # 툴팁에 원본 이름 포함
+                        node,                 # 내부 ID 유지 (참조용)
+                        label=node_label,     # 학생 실명으로 표시
+                        title=tooltip,        # 툴팁 정보
                         size=size,
                         color=color
                     )
@@ -1021,4 +1026,18 @@ class NetworkVisualizer:
         if not self.metrics:
             # 중심성 지표가 계산되지 않았다면 계산
             self.metrics = self.analyzer.metrics
-        return self.metrics 
+        return self.metrics
+
+    # 원본 이름 가져오기 위한 도우미 메서드 추가
+    def _get_original_name(self, node_id):
+        """노드 ID에서 원본 학생 이름 가져오기"""
+        # 1. 분석기에 name_mapping이 있는 경우 (ID -> 이름)
+        if hasattr(self.analyzer, 'name_mapping') and str(node_id) in self.analyzer.name_mapping:
+            return self.analyzer.name_mapping[str(node_id)]
+        
+        # 2. 세션 상태에 name_mapping이 있는 경우
+        elif 'name_mapping' in st.session_state and str(node_id) in st.session_state.name_mapping:
+            return st.session_state.name_mapping[str(node_id)]
+        
+        # 3. 그 외의 경우 원본 ID 반환
+        return str(node_id) 
