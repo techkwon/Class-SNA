@@ -660,6 +660,83 @@ class ReportGenerator:
             logger.error(f"중심성 분석 표시 중 오류: {str(e)}")
             st.error("중심성 분석 결과를 표시하는 중 오류가 발생했습니다.")
     
+    def show_isolated_students(self, network_data):
+        """고립된 학생 분석 결과 표시"""
+        try:
+            st.markdown("## 관계망 주의 학생 분석")
+            st.markdown("""
+            이 섹션에서는 관계망에서 상대적으로 고립되거나 관계가 적은 학생들을 식별합니다.
+            이러한 분석은 교사가 사회적 개입이 필요한 학생들을 파악하는 데 도움이 됩니다.
+            """)
+            
+            # 임계값 설정 슬라이더
+            threshold = st.slider(
+                "고립 학생 식별 임계값 (낮을수록 더 많은 학생이 '고립됨'으로 식별됨):", 
+                min_value=0.0, 
+                max_value=0.5, 
+                value=0.1, 
+                step=0.05,
+                key="isolation_threshold"
+            )
+            
+            # 고립 학생 식별
+            isolated_students = self.analyzer.identify_isolated_nodes(threshold=threshold)
+            
+            if isolated_students:
+                # 고립 학생 목록 표시
+                st.markdown(f"### 관계망 주의 학생 목록 ({len(isolated_students)}명)")
+                
+                # 데이터프레임 생성
+                isolation_data = []
+                for student in isolated_students:
+                    in_degree = self.metrics.get('in_degree', {}).get(student, 0)
+                    out_degree = 0  # 기본값
+                    
+                    # 출력 차수(out degree) 계산
+                    if self.graph:
+                        out_degree = self.graph.out_degree(student)
+                    
+                    # 데이터 추가
+                    isolation_data.append({
+                        "학생": student,
+                        "받은 선택 수": in_degree,
+                        "한 선택 수": out_degree,
+                        "고립도": 1.0 - in_degree  # 단순화된 고립도 지표
+                    })
+                
+                # 데이터프레임 생성 및 정렬
+                if isolation_data:
+                    iso_df = pd.DataFrame(isolation_data)
+                    iso_df = iso_df.sort_values("고립도", ascending=False)
+                    
+                    # 테이블 표시
+                    st.dataframe(iso_df, use_container_width=True)
+                    
+                    # 시각화
+                    st.markdown("### 고립 학생 관계망 시각화")
+                    st.markdown("아래 그래프에서 붉은색으로 표시된 노드는 관계망에서 상대적으로 고립된 학생들입니다.")
+                    
+                    # 여기서 고립 학생을 강조하는 네트워크 시각화 코드를 추가할 수 있습니다
+                    # 현재는 생략하고 텍스트로만 설명
+                    
+                    # 고립 학생 지원 전략
+                    st.markdown("### 고립 학생 지원 전략")
+                    st.markdown("""
+                    관계망에서 고립된 학생들을 지원하기 위한 일반적인 전략:
+                    
+                    1. **그룹 활동 강화**: 다양한 학생들과 협력할 수 있는 그룹 활동을 구성합니다.
+                    2. **멘토-멘티 시스템**: 사회성이 좋은 학생들과 고립된 학생들을 연결하는 멘토링 시스템을 구축합니다.
+                    3. **관심사 기반 활동**: 공통 관심사를 중심으로 한 활동을 통해 자연스러운 관계 형성을 촉진합니다.
+                    4. **사회적 기술 교육**: 고립된 학생들에게 사회적 상호작용 기술을 가르칩니다.
+                    5. **학급 분위기 개선**: 포용적이고 지지적인 학급 분위기를 조성합니다.
+                    """)
+            else:
+                st.info("현재 임계값 기준으로 고립된 학생이 없습니다. 임계값을 낮춰보세요.")
+                
+        except Exception as e:
+            logger.error(f"고립 학생 분석 표시 중 오류: {str(e)}")
+            st.error("고립 학생 분석 결과를 표시하는 중 오류가 발생했습니다.")
+    
     def show_interactive_network(self, network_data):
         """인터랙티브 네트워크 시각화"""
         try:

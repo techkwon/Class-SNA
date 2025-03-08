@@ -15,6 +15,8 @@ requests==2.31.0
 openpyxl==3.1.2
 kaleido==0.2.1
 xlsxwriter==3.1.9
+# 네트워크 레이아웃 및 과학 계산을 위한 패키지
+scipy==1.12.0
 # 폰트 지원을 위한 패키지들
 fonttools==4.46.0
 matplotlib-inline==0.1.6

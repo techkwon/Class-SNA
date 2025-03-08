@@ -638,8 +638,22 @@ class NetworkVisualizer:
                 
                 # 노드 크기 (인기도에 따라)
                 if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
-                    size = 20 + self.metrics['in_degree'][node] * 30
-                    size = min(size, 75)  # 최대 크기 제한
+                    # in_degree 값이 리스트인 경우 처리
+                    in_degree = self.metrics['in_degree'][node]
+                    if isinstance(in_degree, list):
+                        # 리스트인 경우 첫 번째 값 사용
+                        if len(in_degree) > 0:
+                            in_degree = in_degree[0]
+                        else:
+                            in_degree = 0
+                    
+                    # 리스트가 아닌 경우 그대로 사용
+                    try:
+                        size = 20 + float(in_degree) * 30
+                        size = min(size, 75)  # 최대 크기 제한
+                    except (TypeError, ValueError):
+                        # 숫자로 변환할 수 없는 경우
+                        size = 20
                 else:
                     size = 20
                 
@@ -730,6 +744,10 @@ class NetworkVisualizer:
             
             # 데이터프레임 변환 및 정렬
             df = pd.DataFrame(metric_values.items(), columns=['name', 'value'])
+            
+            # 이름이 문자열이 아닌 경우 문자열로 변환
+            df['name'] = df['name'].apply(lambda x: str(x) if not isinstance(x, str) else x)
+            
             df = df.sort_values('value', ascending=False).head(top_n)
             
             # 원본 이름과 영문 표시 이름 매핑
@@ -812,7 +830,7 @@ class NetworkVisualizer:
             if not hasattr(self, 'communities') or not self.communities:
                 # 애널라이저가 있는지 확인
                 if hasattr(self, 'analyzer') and self.analyzer:
-                    self.communities = self.analyzer.detect_communities()
+                    self.communities = self.analyzer.get_communities()
                 else:
                     # 애널라이저가 없으면 빈 데이터 반환
                     logger.warning("커뮤니티 테이블 생성 실패: analyzer가 설정되지 않았습니다.")
@@ -826,75 +844,77 @@ class NetworkVisualizer:
             # 커뮤니티별 학생 그룹화
             community_groups = {}
             try:
-                for node, community_id in self.communities.items():
-                    if community_id not in community_groups:
-                        community_groups[community_id] = []
-                    community_groups[community_id].append(node)
-            except AttributeError:
-                # 커뮤니티 데이터 형식이 예상과 다른 경우
-                logger.warning("커뮤니티 데이터 형식이 예상과 다릅니다")
-                # 이미 그룹화된 형태일 수 있음
-                if isinstance(self.communities, dict):
-                    community_groups = self.communities
-            
-            if not community_groups:
-                logger.warning("커뮤니티 그룹을 생성할 수 없습니다")
+                # 커뮤니티 데이터 형식 검사
+                is_nodeid_to_community = True
+                for key in list(self.communities.keys())[:5]:  # 처음 몇 개만 확인
+                    if not isinstance(key, (str, int)):
+                        is_nodeid_to_community = False
+                        break
+                
+                if is_nodeid_to_community:
+                    # 구조: {노드ID: 커뮤니티ID, ...}
+                    for node, community_id in self.communities.items():
+                        # community_id가 리스트인 경우 (1개 이상의 커뮤니티에 속한 경우)
+                        if isinstance(community_id, list):
+                            # 첫 번째 커뮤니티만 사용
+                            comm_id = str(community_id[0])
+                        else:
+                            comm_id = str(community_id)
+                        
+                        if comm_id not in community_groups:
+                            community_groups[comm_id] = []
+                        
+                        # 노드가 문자열이 아닌 경우 문자열로 변환
+                        node_str = str(node) if not isinstance(node, str) else node
+                        community_groups[comm_id].append(node_str)
+                else:
+                    # 구조: {커뮤니티ID: [노드ID, ...], ...}
+                    for community_id, members in self.communities.items():
+                        comm_id = str(community_id)
+                        
+                        if comm_id not in community_groups:
+                            community_groups[comm_id] = []
+                        
+                        # members가 리스트가 아닌 경우 리스트로 변환
+                        if not isinstance(members, list):
+                            members = [members]
+                        
+                        # 멤버를 문자열로 변환하여 추가
+                        for member in members:
+                            member_str = str(member) if not isinstance(member, str) else member
+                            community_groups[comm_id].append(member_str)
+            except Exception as e:
+                logger.error(f"커뮤니티 그룹화 중 오류: {str(e)}")
                 return pd.DataFrame(columns=["그룹 ID", "학생 수", "주요 학생"])
             
-            # 한글 폰트 문제 확인 및 대응
-            use_romanized = False
-            if hasattr(self, 'has_korean_font'):
-                use_romanized = not self.has_korean_font
-            
-            # 커뮤니티별 데이터 준비
-            data = []
+            # 결과 데이터 생성
+            result_data = []
             for comm_id, members in community_groups.items():
-                if not isinstance(members, (list, tuple, set)):
-                    # 멤버가 리스트가 아닌 경우 (단일 값)
-                    members = [members]
+                # 학생 수
+                student_count = len(members)
                 
-                # 중심성 지표가 높은 학생 식별
-                central_student = ""
-                central_value = 0
+                # 주요 학생 (최대 5명)
+                top_students = ', '.join(members[:5])
+                if student_count > 5:
+                    top_students += ', ...'
                 
-                if hasattr(self, 'metrics') and self.metrics:
-                    # in_degree 기준 중심 학생 식별 시도
-                    try:
-                        if "in_degree" in self.metrics and self.metrics["in_degree"]:
-                            # 중심성 값이 가장 높은 학생 찾기
-                            central_student = max(members, key=lambda x: self.metrics["in_degree"].get(x, 0))
-                            central_value = self.metrics["in_degree"].get(central_student, 0)
-                    except Exception as e:
-                        logger.warning(f"중심 학생 식별 실패: {str(e)}")
-                
-                # 로마자화된 이름 사용 여부 결정
-                if use_romanized and hasattr(self, 'romanize_korean'):
-                    # 이름 변환 시도
-                    try:
-                        member_names = [self.romanize_korean(str(m)) for m in members]
-                        central_student_name = self.romanize_korean(str(central_student)) if central_student else ""
-                    except Exception as e:
-                        logger.warning(f"이름 로마자화 실패: {str(e)}")
-                        member_names = [str(m) for m in members]
-                        central_student_name = str(central_student)
-                else:
-                    member_names = [str(m) for m in members]
-                    central_student_name = str(central_student)
-                
-                data.append({
+                result_data.append({
                     "그룹 ID": comm_id,
-                    "학생 수": len(members),
-                    "주요 학생": central_student_name if central_student else "",
-                    "중심성 값": central_value,
-                    "소속 학생": ", ".join(member_names)
+                    "학생 수": student_count,
+                    "주요 학생": top_students
                 })
             
-            # 데이터프레임 생성 및 반환
-            return pd.DataFrame(data)
+            # 데이터프레임 생성
+            result_df = pd.DataFrame(result_data)
             
+            # 그룹 크기에 따라 정렬
+            if not result_df.empty:
+                result_df = result_df.sort_values(by="학생 수", ascending=False)
+            
+            return result_df
+        
         except Exception as e:
             logger.error(f"커뮤니티 테이블 생성 실패: {str(e)}")
-            # 오류 시 빈 데이터프레임 반환
             return pd.DataFrame(columns=["그룹 ID", "학생 수", "주요 학생"])
     
     def get_centrality_metrics(self):
