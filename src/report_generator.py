@@ -566,4 +566,162 @@ class ReportGenerator:
             st.warning(f"보고서 생성 중 오류가 발생했습니다: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
-            return False 
+            return False
+    
+    def show_communities(self, network_data):
+        """커뮤니티 분석 결과 표시"""
+        try:
+            if not self.communities:
+                st.warning("커뮤니티 정보가 없습니다.")
+                return
+                
+            # 커뮤니티 정보 표시
+            st.markdown("### 하위 그룹 구성")
+            
+            # 커뮤니티 테이블 생성
+            community_table = self.visualizer.create_community_table()
+            st.dataframe(community_table, use_container_width=True)
+            
+            # 커뮤니티 시각화
+            st.markdown("### 하위 그룹 시각화")
+            group_viz = self.visualizer.create_plotly_network(layout="kamada")
+            if group_viz is not None:
+                st.plotly_chart(group_viz, use_container_width=True)
+                
+        except Exception as e:
+            logger.error(f"커뮤니티 분석 표시 중 오류: {str(e)}")
+            st.error("커뮤니티 분석 결과를 표시하는 중 오류가 발생했습니다.")
+    
+    def show_centrality_analysis(self, network_data):
+        """중심성 분석 결과 표시"""
+        try:
+            # 중심성 지표가 있는지 확인
+            if not self.metrics or not any(metric in self.metrics for metric in ['in_degree', 'betweenness']):
+                st.warning("중심성 분석 데이터가 없습니다.")
+                return
+            
+            # 중심성 설명
+            st.markdown("""
+            ### 중심성 지표란?
+            
+            중심성 지표는 네트워크에서 각 학생의 중요도를 나타내는 수치입니다:
+            
+            - **인기도(In-Degree)**: 다른 학생들로부터 받은 선택/지목의 수
+            - **매개 중심성(Betweenness)**: 학생이 다른 학생들을 연결하는 다리 역할을 하는 정도
+            """)
+            
+            # 중심성 지표 선택
+            metric_options = ['in_degree', 'betweenness']
+            metric_names = {'in_degree': '인기도', 'betweenness': '매개 중심성'}
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                selected_metric = st.selectbox(
+                    "분석할 중심성 지표 선택:", 
+                    options=metric_options,
+                    format_func=lambda x: metric_names.get(x, x),
+                    key='centrality_metric'
+                )
+            
+            with col2:
+                top_n = st.slider("표시할 학생 수:", min_value=3, max_value=20, value=10, key='top_n_slider')
+            
+            # 중심성 시각화
+            st.markdown(f"### 상위 {top_n}명 {metric_names.get(selected_metric, selected_metric)} 분석")
+            
+            # 중심성 차트
+            centrality_fig = self.visualizer.create_centrality_plot(metric=selected_metric, top_n=top_n)
+            if centrality_fig is not None:
+                st.pyplot(centrality_fig)
+            
+            # 중심성 데이터 테이블
+            st.markdown("### 전체 중심성 지표")
+            
+            # 데이터프레임 생성
+            data = {}
+            for metric in metric_options:
+                if metric in self.metrics:
+                    data[metric_names.get(metric, metric)] = pd.Series(self.metrics[metric])
+            
+            if data:
+                df = pd.DataFrame(data).reset_index()
+                df.columns = ['학생'] + list(df.columns[1:])
+                df = df.sort_values(by=metric_names.get(selected_metric, selected_metric), ascending=False)
+                
+                # 소수점 자리 포맷팅
+                for col in df.columns[1:]:
+                    df[col] = df[col].map(lambda x: f"{x:.4f}")
+                
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.warning("표시할 중심성 데이터가 없습니다.")
+                
+        except Exception as e:
+            logger.error(f"중심성 분석 표시 중 오류: {str(e)}")
+            st.error("중심성 분석 결과를 표시하는 중 오류가 발생했습니다.")
+    
+    def show_interactive_network(self, network_data):
+        """인터랙티브 네트워크 시각화"""
+        try:
+            st.markdown("## 대화형 관계망 시각화")
+            st.write("""
+            아래 그래프는 마우스로 조작할 수 있습니다:
+            - **드래그**: 학생(노드)을 끌어서 이동할 수 있습니다
+            - **확대/축소**: 마우스 휠로 확대하거나 축소할 수 있습니다
+            - **호버**: 마우스를 올리면 학생 정보가 표시됩니다
+            """)
+            
+            # Plotly 그래프 생성
+            fig = self.visualizer.create_plotly_network()
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # PyVis 네트워크 생성 (인터랙티브)
+            st.write("#### 인터랙티브 네트워크")
+            st.write("""
+            아래 그래프는 마우스로 조작할 수 있습니다:
+            - **드래그**: 학생(노드)을 끌어서 이동할 수 있습니다
+            - **확대/축소**: 마우스 휠로 확대하거나 축소할 수 있습니다
+            - **호버**: 마우스를 올리면 학생 정보가 표시됩니다
+            """)
+            
+            # HTML 코드를 직접 받아옴 (파일 사용하지 않음)
+            html_data = self.visualizer.create_pyvis_network()
+            
+            if html_data:
+                try:
+                    import streamlit.components.v1 as components
+                    components.html(html_data, height=500)
+                except Exception as e:
+                    # 오류 메시지에서 "File name too long" 오류를 특별 처리
+                    error_str = str(e)
+                    if "File name too long" in error_str:
+                        # 다른 방식으로 HTML 표시 시도 (iframe 사용)
+                        try:
+                            from IPython.display import HTML
+                            # HTML을 문자열 단축 처리
+                            html_short = html_data
+                            if len(html_short) > 1000000:  # 1MB 이상이면 요약
+                                html_short = html_short[:500000] + "<!-- 내용 생략 -->" + html_short[-500000:]
+                            # HTML base64 인코딩 후 데이터 URL로 표시
+                            import base64
+                            html_bytes = html_short.encode('utf-8')
+                            encoded = base64.b64encode(html_bytes).decode()
+                            data_url = f"data:text/html;base64,{encoded}"
+                            st.markdown(f'<iframe src="{data_url}" width="100%" height="500px"></iframe>', unsafe_allow_html=True)
+                            
+                            # 다운로드 링크도 제공
+                            html_download = html_data.encode("utf-8")
+                            b64 = base64.b64encode(html_download).decode()
+                            href = f'<a href="data:text/html;base64,{b64}" download="network_graph.html">📥 네트워크 그래프 다운로드</a>'
+                            st.markdown(href, unsafe_allow_html=True)
+                        except Exception as iframe_e:
+                            st.error(f"대체 표시 방법도 실패했습니다: {str(iframe_e)}")
+                            st.info("그래프를 표시할 수 없습니다. 다른 탭의 정적 그래프를 참고하세요.")
+                    else:
+                        st.error(f"인터랙티브 네트워크 표시 중 오류 발생: {error_str}")
+            else:
+                st.warning("인터랙티브 네트워크 생성에 실패했습니다.")
+            
+        except Exception as e:
+            logger.error(f"인터랙티브 네트워크 표시 중 오류: {str(e)}")
+            st.error("인터랙티브 네트워크 시각화에 실패했습니다.") 

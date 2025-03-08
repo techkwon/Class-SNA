@@ -398,7 +398,14 @@ class NetworkAnalyzer:
             community_info = {}
             if self.communities:
                 for comm_id, members in self.communities.items():
-                    community_info[comm_id] = len(members)
+                    # 커뮤니티 멤버가 리스트가 아니라 정수일 수 있으므로 타입 확인
+                    if isinstance(members, list):
+                        community_info[comm_id] = len(members)
+                    else:
+                        # 리스트가 아니면 개수를 1로 설정
+                        community_info[comm_id] = 1
+                        # 정수를 리스트로 변환하여 일관성 유지
+                        self.communities[comm_id] = [str(members)]
             
             # 요약 텍스트 생성
             summary = []
@@ -426,7 +433,16 @@ class NetworkAnalyzer:
                 
                 for comm_id, size in community_info.items():
                     members = self.communities[comm_id]
-                    summary.append(f"- **그룹 {comm_id}**: {size}명 ({', '.join(members[:5])}{', ...' if len(members) > 5 else ''})")
+                    # members가 리스트인지 확인
+                    if isinstance(members, list):
+                        # 최대 5개 멤버만 표시
+                        display_members = members[:5]
+                        # 더 많은 멤버가 있으면 '...' 추가
+                        ellipsis = ', ...' if len(members) > 5 else ''
+                        summary.append(f"- **그룹 {comm_id}**: {size}명 ({', '.join(display_members)}{ellipsis})")
+                    else:
+                        # 리스트가 아닌 경우
+                        summary.append(f"- **그룹 {comm_id}**: 1명 ({members})")
             
             return "\n".join(summary)
             
