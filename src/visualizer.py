@@ -438,10 +438,26 @@ class NetworkVisualizer:
                 for node in G.nodes():
                     try:
                         comm_id = communities.get(node, 0)
+                        
+                        # 커뮤니티 ID가 리스트인 경우 첫 번째 값 사용
+                        if isinstance(comm_id, list):
+                            if len(comm_id) > 0:
+                                comm_id = comm_id[0]
+                            else:
+                                comm_id = 0
+                        
+                        # 커뮤니티 ID가 정수로 변환 가능한지 확인
+                        try:
+                            if not isinstance(comm_id, int):
+                                comm_id = int(comm_id)
+                        except (ValueError, TypeError):
+                            comm_id = 0
+                            
                         color_idx = comm_id % len(color_palette)
                         node_color.append(color_palette[color_idx])
-                    except:
+                    except Exception as e:
                         # 오류 발생 시 기본 색상 사용
+                        logger.warning(f"노드 {node}의 색상 설정 중 오류: {str(e)}")
                         node_color.append('#cccccc')
             else:
                 # 커뮤니티 정보가 없으면 기본 색상 사용
@@ -669,7 +685,29 @@ class NetworkVisualizer:
                 if community_id is not None and community_id in vibrant_colors:
                     color = vibrant_colors[community_id]
                 else:
-                    color = "#7f7f7f"  # 기본 회색
+                    # community_id가 리스트인 경우
+                    if isinstance(community_id, list):
+                        # 첫 번째 값만 사용
+                        if len(community_id) > 0:
+                            comm_id = community_id[0]
+                            # 정수로 변환 시도
+                            try:
+                                comm_id = int(comm_id) % len(vibrant_colors)
+                                color = vibrant_colors[comm_id]
+                            except (ValueError, TypeError):
+                                color = "#7f7f7f"  # 기본 회색
+                        else:
+                            color = "#7f7f7f"  # 기본 회색
+                    else:
+                        # 정수로 변환 시도
+                        try:
+                            if community_id is not None:
+                                comm_id = int(community_id) % len(vibrant_colors)
+                                color = vibrant_colors[comm_id]
+                            else:
+                                color = "#7f7f7f"  # 기본 회색
+                        except (ValueError, TypeError):
+                            color = "#7f7f7f"  # 기본 회색
                 
                 # 툴팁 생성
                 tooltip = f"이름: {original_name} ({node_name})\n"
@@ -742,8 +780,26 @@ class NetworkVisualizer:
             # 선택된 지표 값 가져오기
             metric_values = self.metrics[metric]
             
+            # 리스트 타입의 값을 처리하기 위한 정제 과정
+            processed_values = {}
+            for k, v in metric_values.items():
+                # 값이 리스트인 경우 첫 번째 값 사용
+                if isinstance(v, list):
+                    if len(v) > 0:
+                        processed_values[k] = v[0]
+                    else:
+                        processed_values[k] = 0
+                # 숫자가 아닌 경우 변환 시도
+                elif not isinstance(v, (int, float)):
+                    try:
+                        processed_values[k] = float(v)
+                    except (ValueError, TypeError):
+                        processed_values[k] = 0
+                else:
+                    processed_values[k] = v
+            
             # 데이터프레임 변환 및 정렬
-            df = pd.DataFrame(metric_values.items(), columns=['name', 'value'])
+            df = pd.DataFrame(processed_values.items(), columns=['name', 'value'])
             
             # 이름이 문자열이 아닌 경우 문자열로 변환
             df['name'] = df['name'].apply(lambda x: str(x) if not isinstance(x, str) else x)
