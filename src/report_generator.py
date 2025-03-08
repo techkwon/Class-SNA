@@ -12,6 +12,7 @@ import tempfile
 from datetime import datetime
 import plotly.graph_objects as go
 from src.data_processor import DataProcessor
+import streamlit.components.v1 as components
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -1133,113 +1134,59 @@ class ReportGenerator:
             st.error("커뮤니티 분석 결과를 표시하는 중 오류가 발생했습니다.")
     
     def show_centrality_analysis(self, network_data):
-        """중심성 분석 시각화 생성"""
+        """중심성 분석을 표시합니다"""
         try:
-            # 1. 컨테이너 생성
+            # 컨테이너 생성
             container = st.container()
             
-            # 2. 중심성 지표 섹션
+            # 중심성 지표 섹션
             with container:
-                # 2.1 중심성 개념 소개
+                # 중심성 개념 간략 설명
                 st.markdown("<div class='sub-header'>중심성 분석</div>", unsafe_allow_html=True)
                 st.markdown("""
                 중심성(Centrality)은 네트워크에서 각 노드의 중요도를 측정하는 지표입니다.
-                다양한 중심성 지표를 통해 학급 내 학생들의 역할과 위치를 파악할 수 있습니다.
+                다양한 지표를 통해 학급 내 학생들의 역할을 파악할 수 있습니다.
                 """)
                 
-                # 2.2 중심성 지표 선택
+                # 중심성 지표 선택
                 # 세션 상태 초기화
                 if 'centrality_metric' not in st.session_state:
                     st.session_state.centrality_metric = 'in_degree'
                 
-                if 'top_n_slider' not in st.session_state:
-                    st.session_state.top_n_slider = 10
-                
-                # 사용 가능한 중심성 지표
+                # 지표 목록
                 metrics = {
                     'in_degree': '인기도 (In-Degree)',
                     'out_degree': '활동성 (Out-Degree)',
-                    'betweenness': '매개 중심성 (Betweenness)',
-                    'closeness': '근접 중심성 (Closeness)',
-                    'eigenvector': '고유벡터 중심성 (Eigenvector)'
+                    'betweenness': '매개 중심성 (Betweenness)'
                 }
-                
-                # 이용 가능한 지표만 표시
-                available_metrics = self.visualizer.get_centrality_metrics().keys()
-                filtered_metrics = {k: v for k, v in metrics.items() if k in available_metrics}
                 
                 # 레이아웃 설정
                 col1, col2 = st.columns([1, 3])
                 
                 with col1:
-                    # 콜백 함수 정의 (상태 유지를 위해)
-                    def on_metric_change():
-                        # 상태 유지를 위한 빈 콜백
-                        pass
-                    
-                    # 중심성 지표 선택 - 세션 상태 사용
+                    # 중심성 지표 선택
                     metric = st.selectbox(
                         '중심성 지표:', 
-                        options=list(filtered_metrics.keys()),
-                        format_func=lambda x: filtered_metrics[x],
-                        index=list(filtered_metrics.keys()).index(st.session_state.centrality_metric) 
-                            if st.session_state.centrality_metric in filtered_metrics 
-                            else 0,
-                        key='metric_selectbox',
-                        on_change=on_metric_change
+                        options=list(metrics.keys()),
+                        format_func=lambda x: metrics[x],
+                        index=list(metrics.keys()).index(st.session_state.centrality_metric),
+                        key='metric_selectbox'
                     )
                     
                     # 세션 상태 업데이트
                     st.session_state.centrality_metric = metric
                     
-                    # 콜백 함수 정의 (상태 유지를 위해)
-                    def on_top_n_change():
-                        # 상태 유지를 위한 빈 콜백
-                        pass
-                    
                     # 상위 표시 개수 선택
                     top_n = st.slider(
                         '상위 표시 개수:', 
                         min_value=5, 
-                        max_value=30, 
-                        value=st.session_state.top_n_slider,
+                        max_value=20, 
+                        value=10,
                         step=5,
-                        key='top_n_slider',
-                        on_change=on_top_n_change
+                        key='top_n_slider'
                     )
-                    
-                    # 세션 상태 업데이트
-                    st.session_state.top_n_slider = top_n
                 
-                with col2:
-                    # 현재 선택한 중심성 지표 설명
-                    descriptions = {
-                        'in_degree': """
-                        **인기도(In-Degree)** 중심성은 한 학생에게 들어오는 연결의 수를 측정합니다.
-                        인기도가 높은 학생은 많은 다른 학생들이 선택한 학생으로, 학급 내에서 인기가 많거나 영향력이 큰 경우가 많습니다.
-                        """,
-                        'out_degree': """
-                        **활동성(Out-Degree)** 중심성은 한 학생이 다른 학생들에게 연결하는 수를 측정합니다.
-                        활동성이 높은 학생은 많은 다른 학생들을 선택한 학생으로, 사회적으로 적극적인 경우가 많습니다.
-                        """,
-                        'betweenness': """
-                        **매개(Betweenness)** 중심성은 학생이 다른 학생들 사이의 최단 경로에 위치하는 정도를 측정합니다.
-                        매개 중심성이 높은 학생은 여러 그룹을 연결하는 다리 역할을 하는 경우가 많습니다.
-                        """,
-                        'closeness': """
-                        **근접(Closeness)** 중심성은 한 학생이 네트워크의 다른 모든 학생들에게 얼마나 가까운지를 측정합니다.
-                        근접 중심성이 높은 학생은 정보 확산에 중요한 역할을 합니다.
-                        """,
-                        'eigenvector': """
-                        **고유벡터(Eigenvector)** 중심성은 한 학생이 다른 중요한 학생들과 얼마나 연결되어 있는지를 측정합니다.
-                        중요한 학생들과 연결된 학생도 중요하다는 개념을 반영합니다.
-                        """
-                    }
-                    
-                    if metric in descriptions:
-                        st.info(descriptions[metric])
-                
-                # 3.1 중심성 시각화
+                # 중심성 시각화
                 try:
                     # 중심성 플롯 생성
                     fig = self.visualizer.create_centrality_plot(metric=metric, top_n=top_n)
@@ -1251,7 +1198,7 @@ class ReportGenerator:
                     st.error(f"중심성 시각화 생성 중 오류: {str(e)}")
                     logger.error(f"중심성 시각화 생성 중 오류: {str(e)}")
                 
-                # 3.2 중심성 테이블
+                # 중심성 테이블
                 try:
                     # 중심성 데이터 가져오기
                     centrality_data = self.visualizer.get_centrality_metrics()
@@ -1259,28 +1206,25 @@ class ReportGenerator:
                     if centrality_data and metric in centrality_data:
                         # 데이터 추출 및 정렬
                         data = centrality_data[metric]
-                        
-                        # 리스트로 변환하고 값 기준으로 정렬
                         data_list = [(k, v) for k, v in data.items()]
                         data_list.sort(key=lambda x: x[1], reverse=True)
-                        
-                        # 상위 N개만 선택
                         data_list = data_list[:top_n]
                         
                         # 데이터프레임 생성
-                        df = pd.DataFrame(data_list, columns=['학생', f'{filtered_metrics[metric]} 점수'])
+                        df = pd.DataFrame(data_list, columns=['학생', f'{metrics[metric]} 점수'])
                         
-                        # 한글 이름 가져오기
-                        df['학생'] = df['학생'].apply(lambda x: self.visualizer._get_original_name(x) if hasattr(self.visualizer, '_get_original_name') else x)
+                        # 한글 이름 처리
+                        if hasattr(self.visualizer, '_get_original_name'):
+                            df['학생'] = df['학생'].apply(lambda x: self.visualizer._get_original_name(x))
                         
-                        # 값 반올림 (가독성)
-                        df[f'{filtered_metrics[metric]} 점수'] = df[f'{filtered_metrics[metric]} 점수'].apply(lambda x: round(x, 3))
+                        # 값 반올림
+                        df[f'{metrics[metric]} 점수'] = df[f'{metrics[metric]} 점수'].apply(lambda x: round(x, 3))
                         
-                        # 데이터프레임 표시
-                        st.markdown(f"#### 상위 {top_n}명 학생 - {filtered_metrics[metric]}")
+                        # 테이블 표시
+                        st.markdown(f"#### 상위 {top_n}명 학생")
                         st.dataframe(df, use_container_width=True)
                         
-                        # CSV 다운로드 옵션
+                        # CSV 다운로드 버튼
                         csv = df.to_csv(index=False).encode('utf-8-sig')
                         st.download_button(
                             label="CSV로 다운로드",
@@ -1289,7 +1233,7 @@ class ReportGenerator:
                             mime='text/csv',
                         )
                     else:
-                        st.warning(f"{filtered_metrics[metric]} 데이터를 사용할 수 없습니다.")
+                        st.warning(f"{metrics[metric]} 데이터를 사용할 수 없습니다.")
                 except Exception as e:
                     st.error(f"중심성 테이블 생성 중 오류: {str(e)}")
                     logger.error(f"중심성 테이블 생성 중 오류: {str(e)}")
@@ -1297,8 +1241,6 @@ class ReportGenerator:
         except Exception as e:
             st.error(f"중심성 분석 섹션 생성 중 오류: {str(e)}")
             logger.error(f"중심성 분석 섹션 생성 중 오류: {str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())
     
     def show_isolated_students(self, network_data):
         """고립된 학생 분석 결과 표시"""
@@ -1380,27 +1322,25 @@ class ReportGenerator:
     def show_interactive_network(self, network_data):
         """대화형 관계망 시각화를 생성합니다"""
         try:
-            # 1. 컨테이너 생성 (스크롤 가능한 영역으로)
+            # 컨테이너 생성
             container = st.container()
             
-            # 2. 설명 추가
+            # 설명 추가
             with container:
-                # 상단 설명 텍스트
+                # 간략한 설명
                 st.info("""
-                **대화형 관계망 시각화입니다**
+                **대화형 네트워크 그래프**
                 - 노드(학생)를 드래그하여 위치를 조정할 수 있습니다
-                - 노드 위에 마우스를 올리면 학생 정보가 표시됩니다
-                - 확대/축소는 마우스 휠, 이동은 마우스 드래그로 가능합니다
+                - 마우스 휠로 확대/축소가 가능합니다
                 """)
                 
-                # 레이아웃 선택기
+                # 레이아웃 선택
                 col1, col2 = st.columns([1, 3])
                 
                 # 세션 상태를 사용하여 레이아웃 옵션 유지
                 if 'layout_option' not in st.session_state:
                     st.session_state.layout_option = 'fruchterman'
                     
-                # 드롭다운으로 레이아웃 선택
                 with col1:
                     layout_options = {
                         'fruchterman': '방사형 레이아웃',
@@ -1408,30 +1348,20 @@ class ReportGenerator:
                         'circular': '원형 레이아웃'
                     }
                     
-                    # 콜백 함수 정의 (상태 유지용)
-                    def on_layout_change():
-                        pass  # 상태는 자동으로 업데이트됨
-                    
+                    # 레이아웃 선택 드롭다운
                     layout = st.selectbox(
                         '레이아웃:', 
                         options=list(layout_options.keys()),
                         format_func=lambda x: layout_options[x],
                         index=list(layout_options.keys()).index(st.session_state.layout_option),
-                        key='layout_selectbox',
-                        on_change=on_layout_change
+                        key='layout_selectbox'
                     )
                     
                     # 세션 상태 업데이트
                     st.session_state.layout_option = layout
                 
-                with col2:
-                    st.empty()  # 빈 공간
-                
-                # 3. PyVis 대화형 네트워크 생성
+                # PyVis 네트워크 생성
                 try:
-                    logging.info("대화형 네트워크 생성 시작...")
-                    
-                    # 네트워크 객체 생성
                     pyvis_net = self.visualizer.create_pyvis_network(
                         height="600px", 
                         width="100%",
@@ -1442,29 +1372,16 @@ class ReportGenerator:
                         # HTML을 직접 렌더링
                         html_string = pyvis_net.html
                         
-                        # HTML 문서에 문자셋 및 뷰포트 설정 추가
+                        # 기본 메타 태그 추가
                         if '<meta charset=' not in html_string:
                             html_string = html_string.replace('<head>', '<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">')
                         
-                        # HTML 폭 조정
-                        html_string = html_string.replace('width: 100%;', 'width: 100%; box-sizing: border-box;')
-                        
-                        # 네트워크가 보이지 않는 문제 해결을 위한 JavaScript 추가
+                        # 네트워크 크기 조정 자바스크립트 추가
                         html_string = html_string.replace('</body>', '''
                         <script>
-                        // 네트워크 요소가 제대로 표시되지 않는 문제 해결
                         document.addEventListener("DOMContentLoaded", function() {
-                            setTimeout(function() {
-                                try {
-                                    // 네트워크 캔버스 요소 찾기
-                                    var canvas = document.querySelector('canvas');
-                                    if (canvas) {
-                                        // 크기 재조정 트리거
-                                        window.dispatchEvent(new Event('resize'));
-                                    }
-                                } catch (err) {
-                                    console.error("네트워크 크기 조정 중 오류:", err);
-                                }
+                            setTimeout(function() { 
+                                window.dispatchEvent(new Event('resize')); 
                             }, 300);
                         });
                         </script>
@@ -1472,19 +1389,12 @@ class ReportGenerator:
                         
                         # HTML 렌더링
                         components.html(html_string, height=620, scrolling=True)
-                        logging.info("대화형 네트워크 렌더링 완료")
                     else:
                         st.error("네트워크 시각화를 생성할 수 없습니다")
-                        logging.error("PyVis 네트워크 객체가 None입니다")
-                    
                 except Exception as e:
-                    st.error("네트워크 시각화를 생성하는 중 오류가 발생했습니다")
-                    logging.error(f"대화형 네트워크 생성 중 오류: {str(e)}")
-                    import traceback
-                    logging.error(traceback.format_exc())
-            
+                    st.error(f"네트워크 시각화 생성 중 오류: {str(e)}")
+                    logger.error(f"네트워크 시각화 생성 중 오류: {str(e)}")
+        
         except Exception as e:
-            st.error(f"대화형 네트워크 섹션 생성 중 오류: {str(e)}")
-            logging.error(f"대화형 네트워크 섹션 생성 중 오류: {str(e)}")
-            import traceback
-            logging.error(traceback.format_exc())
+            st.error(f"대화형 네트워크 시각화 생성 중 오류: {str(e)}")
+            logger.error(f"대화형 네트워크 시각화 생성 중 오류: {str(e)}")

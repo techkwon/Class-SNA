@@ -24,51 +24,79 @@ set_streamlit_page_config()
 # assets 디렉토리 확인
 check_and_create_assets()
 
-# 다크모드에서 텍스트가 잘 보이도록 전역 CSS 설정
+# 글로벌 CSS 적용
 def apply_global_css():
-    """다크모드에서도 텍스트가 잘 보이도록 CSS 적용"""
-    dark_mode_css = """
+    """전역 CSS 스타일을 적용합니다"""
+    css = """
     <style>
-    /* 알림 메시지의 글씨를 항상 검은색으로 설정 */
-    div[data-testid="stAlert"] p {
-        color: black !important;
-        font-weight: 500 !important;
+    /* 헤더 스타일 */
+    .main-header {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+        color: #1E88E5;
     }
     
-    /* 알림 메시지의 배경색을 더 밝게 설정 */
-    div[data-testid="stAlert"] {
-        background-color: rgba(255, 255, 255, 0.9) !important;
-        border: 1px solid rgba(0, 0, 0, 0.2) !important;
+    .sub-header {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin: 1rem 0;
+        padding-top: 1rem;
+        border-top: 1px solid #f0f0f0;
+        color: #0D47A1;
+    }
+
+    /* 카드 스타일 */
+    .card {
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        background-color: #f8f9fa;
+        margin-bottom: 1rem;
+        border: 1px solid #e0e0e0;
     }
     
-    /* HTML 태그가 그대로 보이는 문제 수정 */
-    .vis-tooltip, .vis-network-tooltip {
-        white-space: pre-wrap !important;
+    /* 알림 스타일 */
+    .alert {
+        padding: 0.75rem 1.25rem;
+        border: 1px solid transparent;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
     }
     
-    /* <br> 태그 처리 */
-    .vis-tooltip br, .vis-network-tooltip br {
-        display: block !important;
-        content: " " !important;
+    .alert-info {
+        color: #0c5460;
+        background-color: #d1ecf1;
+        border-color: #bee5eb;
     }
     
-    /* 버튼 스타일 개선 */
-    .reset-button {
-        background-color: #f44336;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        text-align: center;
-        text-decoration: none;
-        display: inline-block;
-        font-size: 14px;
-        margin: 4px 2px;
-        cursor: pointer;
-        border-radius: 4px;
+    .alert-warning {
+        color: #856404;
+        background-color: #fff3cd;
+        border-color: #ffeeba;
+    }
+    
+    /* 다크 모드 지원 */
+    @media (prefers-color-scheme: dark) {
+        .card {
+            background-color: #1e1e1e;
+            border-color: #333333;
+        }
+        
+        .alert-info {
+            color: #d1ecf1;
+            background-color: #0c5460;
+            border-color: #0c5460;
+        }
+        
+        .alert-warning {
+            color: #fff3cd;
+            background-color: #856404;
+            border-color: #856404;
+        }
     }
     </style>
     """
-    st.markdown(dark_mode_css, unsafe_allow_html=True)
+    st.markdown(css, unsafe_allow_html=True)
 
 def init_session_state():
     """세션 상태 초기화 (없는 경우에만)"""
@@ -91,8 +119,6 @@ def init_session_state():
             st.session_state.active_tab = 0
         if 'centrality_metric' not in st.session_state:
             st.session_state.centrality_metric = 'in_degree'
-        if 'top_n_slider' not in st.session_state:
-            st.session_state.top_n_slider = 10
         if 'layout_option' not in st.session_state:
             st.session_state.layout_option = 'fruchterman'
             
@@ -101,16 +127,21 @@ def init_session_state():
         logger.info("세션 상태 초기화 완료")
 
 def reset_session():
-    """세션 상태 완전 초기화"""
-    # 모든 세션 상태를 제거
+    """모든 세션 상태를 초기화합니다"""
+    # 세션 상태의 모든 키 삭제
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     
-    # 앱 재실행
-    st.rerun()
+    # 초기화 플래그 설정
+    st.session_state.initialized = False
+    
+    # 다시 초기화 실행
+    init_session_state()
+    
+    logger.info("세션 상태 초기화됨")
 
 def get_example_data_files():
-    """data 디렉토리에서 예시 데이터 파일 목록을 가져옵니다."""
+    """data 디렉토리에서 예시 데이터 파일 목록을 가져옵니다"""
     try:
         # 앱 디렉토리 경로
         app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -136,7 +167,7 @@ def get_example_data_files():
 
 # 예시 데이터 설명 및 제목 함수
 def get_example_data_info(example_name):
-    """예시 데이터에 대한 제목과 설명을 반환합니다."""
+    """예시 데이터에 대한 제목과 설명을 반환합니다"""
     # 예시 데이터 제목과 설명 매핑
     example_info = {
         "example1": {
@@ -144,7 +175,6 @@ def get_example_data_info(example_name):
             "description": """
             이 데이터는 중학교 3학년 가상 학급의 친구 관계를 표현한 예시입니다.
             각 학생은 '함께 공부하고 싶은 친구'와 '여가 시간을 보내고 싶은 친구'를 각각 3명씩 선택했습니다.
-            인기 있는 학생, 그룹 형성, 소외된 학생 등 학급 내 관계 구조를 파악할 수 있습니다.
             """
         },
         "example2": {
@@ -152,7 +182,6 @@ def get_example_data_info(example_name):
             "description": """
             이 데이터는 회사 내 프로젝트 팀원들의 협업 선호도를 조사한 결과입니다.
             각 팀원은 '함께 프로젝트를 진행하고 싶은 동료'를 5명씩 선택했습니다.
-            업무 네트워크에서의 핵심 인물과 협업 패턴을 파악할 수 있습니다.
             """
         }
     }
@@ -162,7 +191,6 @@ def get_example_data_info(example_name):
         "title": f"예시 데이터: {example_name}",
         "description": f"""
         이 데이터는 학급 관계 네트워크 분석을 위한 예시 데이터입니다.
-        학생들 간의 선호도와 관계 패턴을 분석하는 데 활용할 수 있습니다.
         """
     }
     
@@ -171,13 +199,13 @@ def get_example_data_info(example_name):
 
 # 예시 데이터 제목 얻기 함수
 def get_example_title(example_name):
-    """예시 데이터의 제목만 반환합니다."""
+    """예시 데이터의 제목만 반환합니다"""
     info = get_example_data_info(example_name)
     return info["title"]
 
 # 예시 데이터 설명 얻기 함수
 def get_example_description(example_name):
-    """예시 데이터의 설명만 반환합니다."""
+    """예시 데이터의 설명만 반환합니다"""
     info = get_example_data_info(example_name)
     return info["description"]
 
@@ -194,22 +222,19 @@ def main():
     # 페이지 헤더
     st.markdown("<div class='main-header'>학급 관계 네트워크 분석 시스템</div>", unsafe_allow_html=True)
     st.markdown("""
-    학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 자동 변환하여 시각화합니다.
-    구글 시트 공유 링크를 입력하시면 AI가 데이터를 분석하여 네트워크 그래프를 생성합니다.
+    학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 변환하여 시각화합니다.
+    구글 시트 공유 링크를 입력하거나 예시 데이터를 선택하세요.
     """)
     
     # 사이드바
     with st.sidebar:
         st.markdown("### 데이터 입력")
-        st.markdown("""
-        학생 관계 설문조사 데이터가 담긴 구글 시트 링크를 입력하세요.
-        시트는 '공개' 또는 '링크가 있는 사용자에게 공개' 상태여야 합니다.
-        """)
+        st.markdown("구글 시트 공유 링크를 입력하세요.")
         
         # URL 입력 필드 - 고유 키 부여
         sheet_url = st.text_input("구글 시트 공유 링크:", 
-                               value=st.session_state.sheet_url,
-                               key="url_input")
+                                value=st.session_state.sheet_url,
+                                key="url_input")
         
         # URL 변경 시 세션 상태 업데이트
         if sheet_url != st.session_state.sheet_url:
@@ -217,19 +242,9 @@ def main():
             # URL 변경 시 example_selected 초기화
             st.session_state.example_selected = ""
         
-        # 구글 설문조사 양식 링크 추가
-        st.markdown("### 설문조사 양식 예시")
-        st.markdown("""
-        아래 링크로 학생 관계 설문조사 양식을 복사하여 사용할 수 있습니다:
-        
-        [📋 설문조사 양식 복사하기](https://docs.google.com/forms/d/1OOpDNUMp3GIooYb0PgvTUHpMJqfHxY7fMGNRAM_Xez8/copy)
-        
-        이 링크를 통해 설문조사를 생성한 후, 응답 스프레드시트의 링크를 위에 입력하세요.
-        """)
-        
         # 예시 데이터 섹션
         st.markdown("### 예시 데이터")
-        st.markdown("아래 예시 데이터 중 하나를 선택하여 테스트해볼 수 있습니다:")
+        st.markdown("테스트용 예시 데이터를 선택하세요:")
         
         # 예시 목록 추출
         example_options = get_example_data_files()
@@ -265,7 +280,7 @@ def main():
                 else:
                     st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
                     st.session_state.example_selected = ""
-
+        
         # 분석 버튼
         analyzer_button = st.button(
             "분석 시작", 
@@ -279,7 +294,7 @@ def main():
             st.session_state.button_clicked = True
         
         # 세션 초기화 버튼
-        if st.button("🗑️ 모든 데이터 초기화", use_container_width=True, key="reset_button"):
+        if st.button("🗑️ 초기화", use_container_width=True, key="reset_button"):
             reset_session()
             # 이 시점에서 페이지가 리로드됨
             st.rerun()
@@ -290,107 +305,68 @@ def main():
         
         # 이미 분석되지 않았거나 URL이 변경된 경우에만 분석 실행
         if not st.session_state.analyzed or st.session_state.last_analyzed_url != sheet_url:
-            with st.spinner("데이터 분석 중... 잠시만 기다려주세요."):
+            with st.spinner("데이터 분석 중입니다..."):
                 try:
-                    # 진행 상황 표시를 위한 컴포넌트
-                    progress_container = st.container()
-                    progress_bar = progress_container.progress(0, "분석 준비 중...")
-                    progress_text = progress_container.empty()
+                    # 간소화된 진행 표시
+                    progress_bar = st.progress(0)
+                    progress_text = st.empty()
                     
-                    # API 관리자 초기화
-                    progress_text.text("API 초기화 중...")
-                    progress_bar.progress(10)
+                    # API 초기화 및 데이터 로드
+                    progress_text.text("데이터 로드 중...")
+                    progress_bar.progress(25)
+                    
+                    # API 매니저 초기화 (Gemini API 설정 유지)
                     api_manager = APIManager()
-                    
-                    # 데이터 처리기 초기화
-                    progress_text.text("데이터 처리기 초기화 중...")
-                    progress_bar.progress(20)
                     data_processor = DataProcessor(api_manager)
                     
-                    # 데이터 로드 및 처리
+                    # 데이터 처리
+                    progress_text.text("데이터 처리 중...")
+                    progress_bar.progress(50)
+                    
+                    # 파일 또는 URL에서 데이터 로드
                     if sheet_url.startswith("example"):
-                        # 파일 경로 구성
-                        progress_text.text("예시 데이터 로드 중...")
-                        progress_bar.progress(30)
+                        # 예시 파일 로드
                         example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{sheet_url}.csv")
                         if os.path.exists(example_path):
-                            # 예시 파일 로드
                             df = pd.read_csv(example_path)
-                            st.success(f"예시 데이터를 성공적으로 로드했습니다: {sheet_url}")
-                            
-                            # 데이터 미리보기
-                            progress_text.text("데이터 미리보기 생성 중...")
-                            progress_bar.progress(40)
-                            st.dataframe(df.head(), use_container_width=True)
-                            
-                            # 데이터 처리
-                            progress_text.text("네트워크 데이터 생성 중...")
-                            progress_bar.progress(50)
                             network_data = data_processor.process_network_data(df)
-                            if network_data:
-                                # 네트워크 데이터 저장
-                                st.session_state.network_data = network_data
-                                st.session_state.analyzed = True
-                                st.session_state.last_analyzed_url = sheet_url
-                                
-                                # 분석 결과 계산
-                                progress_text.text("네트워크 분석 중...")
-                                progress_bar.progress(70)
-                                
-                                # 한글 폰트 설정
-                                progress_text.text("시각화 준비 중...")
-                                progress_bar.progress(90)
-                                set_korean_font()
-                                
-                                # 진행 완료
-                                progress_bar.progress(100)
-                                progress_text.text("분석 완료!")
-                                
-                                # 결과 표시 컨테이너
-                                results_container = st.container()
-                                with results_container:
-                                    # 분석 결과 표시
-                                    show_analysis_results()
-                            else:
-                                progress_bar.empty()
-                                progress_text.empty()
-                                st.error("데이터 처리에 실패했습니다.")
                         else:
+                            st.error(f"예시 파일을 찾을 수 없습니다: {example_path}")
                             progress_bar.empty()
                             progress_text.empty()
-                            st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
+                            return
                     else:
                         # 구글 시트에서 데이터 로드
-                        with st.status("구글 시트에서 데이터 로드 중...") as status:
-                            progress_text.text("구글 시트 데이터 로드 중...")
-                            progress_bar.progress(30)
-                            result = data_processor.process_survey_data(sheet_url)
-                            if result:
-                                status.update(label="데이터 처리 완료!", state="complete")
-                                progress_text.text("네트워크 분석 중...")
-                                progress_bar.progress(70)
-                                
-                                # 네트워크 데이터 저장
-                                st.session_state.network_data = result
-                                st.session_state.analyzed = True
-                                st.session_state.last_analyzed_url = sheet_url
-                                
-                                # 분석 결과 계산
-                                progress_text.text("시각화 준비 중...")
-                                progress_bar.progress(90)
-                                set_korean_font()
-                                
-                                # 진행 완료
-                                progress_bar.progress(100)
-                                progress_text.text("분석 완료!")
-                                
-                                # 분석 결과 표시
-                                show_analysis_results()
-                            else:
-                                progress_bar.empty()
-                                progress_text.empty()
-                                status.update(label="데이터 처리 실패", state="error")
-                                st.error("구글 시트 데이터를 처리할 수 없습니다. URL을 확인해주세요.")
+                        network_data = data_processor.process_survey_data(sheet_url)
+                    
+                    if not network_data:
+                        st.error("데이터 처리에 실패했습니다.")
+                        progress_bar.empty()
+                        progress_text.empty()
+                        return
+                    
+                    # 데이터 저장 및 분석
+                    progress_text.text("네트워크 분석 중...")
+                    progress_bar.progress(75)
+                    
+                    # 세션 상태 업데이트
+                    st.session_state.network_data = network_data
+                    st.session_state.analyzed = True
+                    st.session_state.last_analyzed_url = sheet_url
+                    
+                    # 한글 폰트 설정
+                    set_korean_font()
+                    
+                    # 진행 완료
+                    progress_bar.progress(100)
+                    progress_text.text("분석 완료!")
+                    time.sleep(0.5)  # 잠시 기다려 완료 메시지 표시
+                    progress_bar.empty()
+                    progress_text.empty()
+                    
+                    # 분석 결과 표시
+                    show_analysis_results()
+                    
                 except Exception as e:
                     if 'progress_bar' in locals():
                         progress_bar.empty()
@@ -401,29 +377,16 @@ def main():
             # 이미 분석된 결과가 있는 경우 바로 표시
             show_analysis_results()
     else:
-        # 분석 전 가이드 표시
-        st.info("데이터 분석을 시작하려면 왼쪽 사이드바에서 Google 시트 URL을 입력하거나 예시 데이터를 선택한 후 '분석 시작' 버튼을 클릭하세요.")
+        # 분석 전 간략한 가이드 표시
+        st.info("데이터 분석을 시작하려면 왼쪽 사이드바에서 데이터를 선택하고 '분석 시작' 버튼을 클릭하세요.")
         
-        # 사용 방법 안내
+        # 사용 방법 간략화
         st.markdown("""
-        ## 사용 방법
+        ## 간단 사용 가이드
         
-        ### 🔍 데이터 준비
-        
-        1. 구글 설문지에서 학생들의 관계 데이터를 수집합니다
-        2. 구글 시트로 응답을 수집하고 시트의 공유 링크를 복사합니다
-        3. 이 앱에 링크를 붙여넣고 '분석 시작' 버튼을 클릭합니다
-        
-        ### 🛠️ 필요한 데이터 형식
-        
-        - 응답자 이름/ID를 포함하는 열 1개 이상
-        - 관계를 나타내는 질문(누구와 함께 하고 싶은지 등)을 포함하는 열 1개 이상
-        
-        ### 📝 예시 질문
-        
-        - "함께 공부하고 싶은 친구는 누구인가요?"
-        - "어려운 일이 있을 때 도움을 청하고 싶은 친구는?"
-        - "여가 시간을 함께 보내고 싶은 친구는?"
+        1. **데이터 입력**: 구글 시트 링크를 입력하거나 예시 데이터 선택
+        2. **분석 시작**: 버튼을 클릭하여 네트워크 분석 실행
+        3. **결과 확인**: 생성된 네트워크 그래프와 분석 결과 확인
         """)
         
         # 푸터 표시
@@ -431,70 +394,183 @@ def main():
 
 # 분석 결과 표시 함수
 def show_analysis_results():
-    """저장된 분석 결과 표시"""
+    """저장된 분석 결과를 간략하게 표시합니다"""
     try:
         # 세션에서 network_data 가져오기
         network_data = st.session_state.network_data
         
+        if not network_data:
+            st.error("분석할 네트워크 데이터가 없습니다.")
+            return
+            
         # 분석 객체 생성
         analyzer = NetworkAnalyzer(network_data)
-        
-        # 분석 지표 계산 (이미 계산되어 있을 수 있음)
-        if not hasattr(analyzer, 'metrics') or not analyzer.metrics:
-            analyzer.calculate_centrality()
-        
-        # 커뮤니티 분석 (이미 계산되어 있을 수 있음)
-        if not hasattr(analyzer, 'communities') or not analyzer.communities:
-            analyzer.detect_communities()
         
         # 시각화 객체 생성
         visualizer = NetworkVisualizer(analyzer)
         
-        # 한글 폰트 설정
-        set_korean_font()
-        
-        # 보고서 생성 객체
+        # 보고서 생성기 초기화
         report_generator = ReportGenerator(analyzer, visualizer)
         
-        # 이름 매핑 테이블 표시 (미리 펼쳐서 표시)
-        if hasattr(st.session_state, 'name_mapping') and st.session_state.name_mapping:
-            with st.expander("📋 한글-영문 이름 변환 테이블", expanded=True):
-                st.info("네트워크 분석과 시각화를 위해 한글 이름은 자동으로 영문으로 변환됩니다. 아래는 변환된 이름 목록입니다.")
+        # 탭 구성 (최소한의 탭만 유지)
+        tab1, tab2 = st.tabs(["네트워크 시각화", "중심성 분석"])
+        
+        # 탭 1: 네트워크 시각화
+        with tab1:
+            st.markdown("<div class='sub-header'>네트워크 시각화</div>", unsafe_allow_html=True)
+            
+            # 레이아웃 옵션
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                # 레이아웃 선택
+                layout = st.selectbox(
+                    "레이아웃:", 
+                    options=["fruchterman", "force", "circular"],
+                    format_func=lambda x: {"fruchterman": "방사형", "force": "힘 기반", "circular": "원형"}[x],
+                    index=0,
+                    key="layout_selector"
+                )
+            
+            # 네트워크 시각화 표시
+            try:
+                # PyVis 네트워크 생성
+                pyvis_net = visualizer.create_pyvis_network(
+                    height="600px", 
+                    width="100%",
+                    layout=layout
+                )
                 
-                # 테이블 생성을 위한 데이터
-                name_data = []
-                for korean, roman in st.session_state.name_mapping.items():
-                    name_data.append({"한글 이름": korean, "영문 변환": roman})
+                if pyvis_net:
+                    # HTML을 직접 렌더링
+                    html_string = pyvis_net.html
+                    
+                    # 기본 메타 태그 추가
+                    if '<meta charset=' not in html_string:
+                        html_string = html_string.replace('<head>', '<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">')
+                    
+                    # 스타일 조정
+                    html_string = html_string.replace('width: 100%;', 'width: 100%; box-sizing: border-box;')
+                    
+                    # 자바스크립트 개선
+                    html_string = html_string.replace('</body>', '''
+                    <script>
+                    document.addEventListener("DOMContentLoaded", function() {
+                        setTimeout(function() {
+                            try {
+                                window.dispatchEvent(new Event('resize'));
+                            } catch (err) {}
+                        }, 300);
+                    });
+                    </script>
+                    </body>''')
+                    
+                    # HTML 렌더링
+                    st.components.v1.html(html_string, height=620, scrolling=True)
+                else:
+                    st.error("네트워크 시각화를 생성할 수 없습니다.")
+            except Exception as e:
+                st.error(f"네트워크 시각화 생성 중 오류: {str(e)}")
+        
+        # 탭 2: 중심성 분석
+        with tab2:
+            st.markdown("<div class='sub-header'>중심성 분석</div>", unsafe_allow_html=True)
+            
+            # 중심성 지표 선택
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                # 중심성 지표 목록 (간략화)
+                metrics = {
+                    'in_degree': '인기도 (In-Degree)',
+                    'out_degree': '활동성 (Out-Degree)',
+                    'betweenness': '매개 중심성'
+                }
                 
-                if name_data:
-                    name_df = pd.DataFrame(name_data)
+                # 중심성 지표 선택
+                metric = st.selectbox(
+                    '중심성 지표:', 
+                    options=list(metrics.keys()),
+                    format_func=lambda x: metrics[x],
+                    index=0,
+                    key='metric_selector'
+                )
+                
+                # 표시할 학생 수
+                top_n = st.slider(
+                    '상위 표시 개수:', 
+                    min_value=5, 
+                    max_value=20, 
+                    value=10,
+                    step=5,
+                    key='top_n_slider'
+                )
+            
+            with col2:
+                # 중심성 지표 설명
+                descriptions = {
+                    'in_degree': """
+                    **인기도(In-Degree)** 중심성은 한 학생에게 들어오는 연결의 수를 측정합니다.
+                    인기도가 높은 학생은 많은 다른 학생들이 선택한 학생입니다.
+                    """,
+                    'out_degree': """
+                    **활동성(Out-Degree)** 중심성은 한 학생이 다른 학생들을 선택한 수를 측정합니다.
+                    활동성이 높은 학생은 많은 다른 학생들을 선택한 학생입니다.
+                    """,
+                    'betweenness': """
+                    **매개(Betweenness)** 중심성은 학생이 다른 학생들 사이의 최단 경로에 위치하는 정도를 측정합니다.
+                    매개 중심성이 높은 학생은 여러 그룹을 연결하는 역할을 합니다.
+                    """
+                }
+                
+                # 선택한 지표 설명 표시
+                if metric in descriptions:
+                    st.info(descriptions[metric])
+            
+            # 중심성 차트
+            try:
+                # 중심성 플롯 생성
+                fig = visualizer.create_centrality_plot(metric=metric, top_n=top_n)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("중심성 시각화를 생성할 수 없습니다.")
                     
-                    # 2개 열로 나란히 표시
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.dataframe(name_df, hide_index=True, use_container_width=True)
+                # 중심성 데이터 표 생성
+                centrality_data = visualizer.get_centrality_metrics()
+                if centrality_data and metric in centrality_data:
+                    # 데이터 추출 및 정렬
+                    data = centrality_data[metric]
+                    data_list = [(k, v) for k, v in data.items()]
+                    data_list.sort(key=lambda x: x[1], reverse=True)
+                    data_list = data_list[:top_n]
                     
-                    # 다운로드 버튼 추가
-                    with col2:
-                        st.markdown("### 변환 테이블 다운로드")
-                        st.markdown("이름 매핑 테이블을 다운로드하여 참고할 수 있습니다.")
-                        
-                        # CSV 파일로 변환
-                        csv = name_df.to_csv(index=False)
-                        st.download_button(
-                            label="📥 CSV 파일로 다운로드",
-                            data=csv,
-                            file_name="name_mapping.csv",
-                            mime="text/csv",
-                            use_container_width=True
-                        )
-        
-        # 메인 분석 보고서 생성
-        report_generator.generate_full_report(network_data)
-        
-        # 보고서 생성 완료 로그
-        logger.info("보고서 생성 완료")
-        
+                    # 데이터프레임 생성
+                    df = pd.DataFrame(data_list, columns=['학생', f'{metrics[metric]} 점수'])
+                    
+                    # 한글 이름 가져오기
+                    df['학생'] = df['학생'].apply(lambda x: visualizer._get_original_name(x) if hasattr(visualizer, '_get_original_name') else x)
+                    
+                    # 값 반올림
+                    df[f'{metrics[metric]} 점수'] = df[f'{metrics[metric]} 점수'].apply(lambda x: round(x, 3))
+                    
+                    # 표 표시
+                    st.markdown(f"#### 상위 {top_n}명 학생")
+                    st.dataframe(df, use_container_width=True)
+                    
+                    # CSV 다운로드 버튼
+                    csv = df.to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        label="CSV로 다운로드",
+                        data=csv,
+                        file_name=f'중심성_{metric}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                        mime='text/csv',
+                    )
+                else:
+                    st.warning(f"{metrics[metric]} 데이터를 사용할 수 없습니다.")
+            except Exception as e:
+                st.error(f"중심성 분석 표시 중 오류: {str(e)}")
+    
     except Exception as e:
         handle_error(f"분석 결과 표시 중 오류 발생: {str(e)}")
 
