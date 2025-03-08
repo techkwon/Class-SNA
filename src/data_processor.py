@@ -569,12 +569,15 @@ class DataProcessor:
             logger.error(f"설문조사 데이터 처리 실패: {str(e)}")
             raise Exception(f"데이터 처리 중 오류가 발생했습니다: {str(e)}")
 
-    def process_network_data(self, raw_data, api_enabled=True):
-        """네트워크 분석용 데이터로 변환 및 Gemini로 처리"""
+    def process_network_data(self, raw_data):
+        """네트워크 분석을 위한 데이터 처리"""
         try:
-            # 빈 데이터 체크
+            # API 사용 가능 여부 확인
+            api_enabled = hasattr(self, 'api_manager') and self.api_manager is not None
+            
+            # 입력 데이터 검증
             if raw_data is None or raw_data.empty:
-                logger.error("처리할 데이터가 없습니다.")
+                logger.error("유효하지 않은 입력 데이터")
                 return None
             
             # 데이터 구조 분석
@@ -585,11 +588,22 @@ class DataProcessor:
             if api_enabled and hasattr(self, 'api_manager') and self.api_manager:
                 insights = self.analyze_with_ai(raw_data)
             
-            # 데이터 구조 정리
-            students, questions = self.identify_data_structure(raw_data, insights)
+            # 데이터 구조 분석 (기존 메서드 사용)
+            analysis_result = self.analyze_data_structure(raw_data)
             
-            # PyVis 및 내부 처리용 ID 변환
-            # 학생 이름을 숫자 ID로 매핑 (내부 처리용)
+            # 학생 정보와 질문 정보 추출
+            students = analysis_result.get('students', [])
+            questions = analysis_result.get('relationship_columns', [])
+            
+            # 충분한 데이터가 있는지 확인
+            if not students or len(students) < 2:
+                logger.error("충분한 학생 데이터가 없습니다 (최소 2명 필요)")
+                return None
+            
+            if not questions:
+                logger.warning("관계 질문을 찾을 수 없습니다. 무작위 데이터를 생성합니다.")
+            
+            # 이름 매핑 생성 (로마자 변환용)
             from src.visualizer import romanize_korean
             id_mapping = {}            # 이름 -> ID
             name_mapping = {}          # ID -> 이름

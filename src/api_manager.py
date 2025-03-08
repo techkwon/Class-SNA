@@ -299,4 +299,42 @@ class APIManager:
         if survey_questions:
             prompt += f"\n\n# 설문조사 질문:\n{survey_questions}"
         
-        return self.generate_response(prompt) 
+        return self.generate_response(prompt)
+
+    def generate_text(self, prompt):
+        """텍스트 생성 API를 호출합니다."""
+        try:
+            # API 키가 없으면 로컬 처리로 대체
+            if not self.current_api_key:
+                logger.warning("API 키가 없어 텍스트 생성을 건너뜁니다.")
+                return None
+
+            if self.model == "gemini":
+                return self._generate_with_gemini(prompt)
+            else:
+                # 기본적으로 Gemini 사용
+                return self._generate_with_gemini(prompt)
+        except Exception as e:
+            logger.error(f"텍스트 생성 중 오류: {e}")
+            return None
+
+    def _generate_with_gemini(self, prompt):
+        """Google Gemini API를 사용하여 텍스트를 생성합니다."""
+        try:
+            # API 키 설정
+            genai.configure(api_key=self.current_api_key)
+            
+            # 모델 선택
+            model = genai.GenerativeModel('gemini-1.5-pro')
+            
+            # 생성 요청
+            response = model.generate_content(prompt)
+            
+            # 응답 텍스트 반환
+            return response.text
+        except ImportError:
+            logger.error("Google Generative AI 패키지가 설치되어 있지 않습니다.")
+            return None
+        except Exception as e:
+            logger.error(f"Gemini API 호출 중 오류: {e}")
+            return None 

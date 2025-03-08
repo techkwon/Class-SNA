@@ -134,45 +134,52 @@ def get_example_data_files():
         logger.error(f"예시 데이터 파일 목록 조회 중 오류: {str(e)}")
         return ["example1", "example2"]  # 오류 발생 시 기본값 반환
 
-# 예시 데이터 설명 함수
-def get_example_data_description(example_name):
-    """예시 데이터에 대한 설명을 반환합니다."""
-    descriptions = {
-        "example1": """
-        **가상 학급 친구 관계 데이터**
-        
-        이 데이터는 중학교 3학년 가상 학급의 친구 관계를 표현한 예시입니다.
-        각 학생은 '함께 공부하고 싶은 친구'와 '여가 시간을 보내고 싶은 친구'를 각각 3명씩 선택했습니다.
-        인기 있는 학생, 그룹 형성, 소외된 학생 등 학급 내 관계 구조를 파악할 수 있습니다.
-        """,
-        
-        "example2": """
-        **협업 선호도 데이터**
-        
-        이 데이터는 회사 내 프로젝트 팀원들의 협업 선호도를 조사한 결과입니다.
-        각 팀원은 '함께 프로젝트를 진행하고 싶은 동료'를 5명씩 선택했습니다.
-        업무 네트워크에서의 핵심 인물과 협업 패턴을 파악할 수 있습니다.
-        """,
-        
-        "example3": """
-        **학급 내 영향력 관계 데이터**
-        
-        이 데이터는 고등학교 2학년 학급의 사회적 영향력 관계를 표현한 예시입니다.
-        각 학생은 '의견을 존중하는 친구'와 '조언을 구하고 싶은 친구'를 선택했습니다.
-        학급 내 의견 리더와 신뢰 관계망을 분석할 수 있습니다.
-        """
+# 예시 데이터 설명 및 제목 함수
+def get_example_data_info(example_name):
+    """예시 데이터에 대한 제목과 설명을 반환합니다."""
+    # 예시 데이터 제목과 설명 매핑
+    example_info = {
+        "example1": {
+            "title": "가상 학급 친구 관계 데이터",
+            "description": """
+            이 데이터는 중학교 3학년 가상 학급의 친구 관계를 표현한 예시입니다.
+            각 학생은 '함께 공부하고 싶은 친구'와 '여가 시간을 보내고 싶은 친구'를 각각 3명씩 선택했습니다.
+            인기 있는 학생, 그룹 형성, 소외된 학생 등 학급 내 관계 구조를 파악할 수 있습니다.
+            """
+        },
+        "example2": {
+            "title": "협업 선호도 데이터",
+            "description": """
+            이 데이터는 회사 내 프로젝트 팀원들의 협업 선호도를 조사한 결과입니다.
+            각 팀원은 '함께 프로젝트를 진행하고 싶은 동료'를 5명씩 선택했습니다.
+            업무 네트워크에서의 핵심 인물과 협업 패턴을 파악할 수 있습니다.
+            """
+        }
     }
     
     # 기본 설명 형식
-    default_description = f"""
-    **예시 데이터: {example_name}**
+    default_info = {
+        "title": f"예시 데이터: {example_name}",
+        "description": f"""
+        이 데이터는 학급 관계 네트워크 분석을 위한 예시 데이터입니다.
+        학생들 간의 선호도와 관계 패턴을 분석하는 데 활용할 수 있습니다.
+        """
+    }
     
-    이 데이터는 학급 관계 네트워크 분석을 위한 예시 데이터입니다.
-    학생들 간의 선호도와 관계 패턴을 분석하는 데 활용할 수 있습니다.
-    """
-    
-    # 해당 예시 데이터의 설명 반환 (없으면 기본 설명)
-    return descriptions.get(example_name, default_description)
+    # 해당 예시 데이터의 정보 반환 (없으면 기본 정보)
+    return example_info.get(example_name, default_info)
+
+# 예시 데이터 제목 얻기 함수
+def get_example_title(example_name):
+    """예시 데이터의 제목만 반환합니다."""
+    info = get_example_data_info(example_name)
+    return info["title"]
+
+# 예시 데이터 설명 얻기 함수
+def get_example_description(example_name):
+    """예시 데이터의 설명만 반환합니다."""
+    info = get_example_data_info(example_name)
+    return info["description"]
 
 def main():
     # 전역 CSS 적용
@@ -227,12 +234,19 @@ def main():
         # 예시 목록 추출
         example_options = get_example_data_files()
         
+        # 예시 데이터와 제목 매핑 생성 (드롭다운 표시용)
+        example_titles = {ex: get_example_title(ex) for ex in example_options}
+        
+        # 빈 선택지 추가
+        all_options = [""] + example_options
+        format_func = lambda x: "선택하세요" if x == "" else f"{x}: {example_titles.get(x, x)}"
+        
         # 예시 선택 드롭다운
         example_selection = st.selectbox(
             "예시 데이터 선택:", 
-            options=[""] + example_options,
+            options=all_options,
             index=0,
-            format_func=lambda x: "선택하세요" if x == "" else x,
+            format_func=format_func,
             key="example_selectbox"
         )
         
@@ -246,8 +260,8 @@ def main():
                     st.session_state.sheet_url = example_selection
                     
                     # 예시 데이터 설명 표시
-                    st.success(f"'{example_selection}' 예시 데이터가 선택되었습니다.")
-                    st.markdown(get_example_data_description(example_selection))
+                    st.success(f"'{example_titles.get(example_selection, example_selection)}' 예시 데이터가 선택되었습니다.")
+                    st.markdown(get_example_description(example_selection))
                 else:
                     st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
                     st.session_state.example_selected = ""
