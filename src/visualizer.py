@@ -318,8 +318,14 @@ class NetworkVisualizer:
                     
                     # 원래 이름 사용 (한글)
                     original_name = str(node)
+                    
+                    # 이름 매핑 검색 - 여러 위치에서 검색
                     if hasattr(self.analyzer, 'id_to_name') and node in self.analyzer.id_to_name:
                         original_name = self.analyzer.id_to_name.get(node, str(node))
+                    elif hasattr(self.analyzer, 'name_mapping') and node in self.analyzer.name_mapping:
+                        original_name = self.analyzer.name_mapping.get(node, str(node))
+                    elif 'label' in attrs:
+                        original_name = attrs['label']
                     
                     # ID와 이름 매핑 저장
                     self.id_mapping[node] = original_name

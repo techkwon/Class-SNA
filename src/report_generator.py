@@ -1349,7 +1349,7 @@ class ReportGenerator:
         
         try:
             # Plotly 네트워크 시각화 생성
-            visualizer = self.network_analyzer.visualizer
+            visualizer = self.visualizer  # network_analyzer 대신 직접 visualizer 속성 사용
             fig = visualizer.create_plotly_network(
                 layout=selected_layout,
                 width=800,
