@@ -739,6 +739,12 @@ class ReportGenerator:
     def show_student_analysis(self, network_data):
         """학생별 관계망 및 중심성 분석"""
         try:
+            st.markdown("## 👤 학생별 관계망 분석")
+            st.markdown("""
+            이 분석은 개별 학생의 관계 형태와 특성을 보여줍니다. 각 학생이 학급 내에서 어떤 위치에 있는지, 
+            누구와 관계를 맺고 있는지 파악할 수 있습니다.
+            """)
+            
             # 선택 가능한 학생 목록 (실제 이름 표시)
             student_ids = list(self.graph.nodes())
             
@@ -746,13 +752,36 @@ class ReportGenerator:
                 st.warning("분석할 학생 데이터가 없습니다.")
                 return
             
-            # 학생 ID를 실제 이름 또는 ID로 표시하기 위한 변환
+            # 학생 ID를 실제 이름으로 표시하기 위한 변환
             romanized_to_korean = {}
-            for node_id in student_ids:
-                # 실제 이름으로 변환 (가능한 경우)
-                if hasattr(self.analyzer, 'id_to_name') and node_id in self.analyzer.id_to_name:
-                    romanized_to_korean[node_id] = self.analyzer.id_to_name[node_id]
-                else:
+            
+            # 원본 이름 매핑 확인
+            if hasattr(self.analyzer, 'name_mapping') and self.analyzer.name_mapping:
+                # 애널라이저의 name_mapping 사용 (ID -> 이름)
+                for node_id in student_ids:
+                    if node_id in self.analyzer.name_mapping:
+                        romanized_to_korean[node_id] = self.analyzer.name_mapping[node_id]
+                    else:
+                        romanized_to_korean[node_id] = str(node_id)
+            # 역 로마자화 매핑 확인
+            elif hasattr(self.analyzer, 'reverse_romanized') and self.analyzer.reverse_romanized:
+                # 애널라이저의 reverse_romanized 사용 (로마자 -> 한글)
+                for node_id in student_ids:
+                    if node_id in self.analyzer.reverse_romanized:
+                        romanized_to_korean[node_id] = self.analyzer.reverse_romanized[node_id]
+                    else:
+                        romanized_to_korean[node_id] = str(node_id)
+            # id_to_name 매핑 확인
+            elif hasattr(self.analyzer, 'id_to_name') and self.analyzer.id_to_name:
+                # 애널라이저의 id_to_name 사용
+                for node_id in student_ids:
+                    if node_id in self.analyzer.id_to_name:
+                        romanized_to_korean[node_id] = self.analyzer.id_to_name[node_id]
+                    else:
+                        romanized_to_korean[node_id] = str(node_id)
+            else:
+                # 기본 변환 (ID를 문자열로)
+                for node_id in student_ids:
                     romanized_to_korean[node_id] = str(node_id)
             
             # 학생 선택 드롭다운 메뉴
@@ -764,31 +793,40 @@ class ReportGenerator:
             
             # 선택된 학생 ID
             selected_student_id = selected_student
+            selected_student_name = romanized_to_korean.get(selected_student_id, str(selected_student_id))
             
             # 선택된 학생의 중심성 지표
             in_degree = 0
+            out_degree = 0
             betweenness = 0
+            eigenvector = 0
+            closeness = 0
             
             if 'in_degree' in self.metrics and selected_student_id in self.metrics['in_degree']:
                 in_degree = self.metrics['in_degree'][selected_student_id]
-            
+            if 'out_degree' in self.metrics and selected_student_id in self.metrics['out_degree']:
+                out_degree = self.metrics['out_degree'][selected_student_id]
             if 'betweenness' in self.metrics and selected_student_id in self.metrics['betweenness']:
                 betweenness = self.metrics['betweenness'][selected_student_id]
+            if 'eigenvector' in self.metrics and selected_student_id in self.metrics['eigenvector']:
+                eigenvector = self.metrics['eigenvector'][selected_student_id]
+            if 'closeness' in self.metrics and selected_student_id in self.metrics['closeness']:
+                closeness = self.metrics['closeness'][selected_student_id]
             
             # 학생 분석 정보 표시
-            st.markdown(f"## {romanized_to_korean.get(selected_student_id, str(selected_student_id))}")
+            st.markdown(f"### 📊 {selected_student_name}님의 관계망 분석", unsafe_allow_html=True)
             
             # 학생 정보를 두 컬럼으로 나누어 표시
             col1, col2 = st.columns([1, 1])
             
             with col1:
-                st.markdown("#### 학생 중심성 지표")
+                st.markdown("#### 👑 학생 중심성 지표")
                 
                 # 입력 및 출력 차수
                 in_degree_actual = self.graph.in_degree(selected_student_id)
                 out_degree_actual = self.graph.out_degree(selected_student_id)
                 
-                # 커뮤니티 찾기 (None 체크 추가)
+                # 커뮤니티 찾기
                 community_id = "없음"
                 if self.communities is not None:
                     for comm_id, members in self.communities.items():
@@ -798,93 +836,142 @@ class ReportGenerator:
                 
                 # 데이터 테이블
                 metrics_data = {
-                    "지표": ["받은 선택 수", "한 선택 수", "매개 중심성", "소속 그룹"],
+                    "지표": ["받은 선택 수", "한 선택 수", "매개 중심성", "근접 중심성", "영향력", "소속 그룹"],
                     "값": [
                         f"{in_degree_actual}",
                         f"{out_degree_actual}",
                         f"{betweenness:.3f}" if isinstance(betweenness, (int, float)) else str(betweenness),
+                        f"{closeness:.3f}" if isinstance(closeness, (int, float)) else str(closeness),
+                        f"{eigenvector:.3f}" if isinstance(eigenvector, (int, float)) else str(eigenvector),
                         f"{community_id}"
                     ]
                 }
-                st.table(pd.DataFrame(metrics_data))
+                
+                metrics_df = pd.DataFrame(metrics_data)
+                st.table(metrics_df)
                 
                 # 학생 위치 해석
-                st.markdown("#### 학생 역할 분석")
+                st.markdown("#### 🧠 학생 역할 분석")
                 
                 # 역할 결정
                 role = self._determine_student_role(in_degree, betweenness, in_degree_actual, out_degree_actual)
                 
                 st.markdown(f"**역할:** {role['title']}")
                 st.markdown(f"{role['description']}")
+                
+                # 중심성 지표 설명 추가
+                with st.expander("📌 중심성 지표 설명"):
+                    st.markdown("""
+                    - **받은 선택 수**: 다른 학생들로부터 받은 선택의 수입니다. 높을수록 인기가 많은 학생입니다.
+                    - **한 선택 수**: 학생이 다른 학생들을 선택한 수입니다. 높을수록 활동적인 학생입니다.
+                    - **매개 중심성**: 학생이 다른 학생들 사이의 관계를 연결하는 정도입니다. 높을수록 중재자 역할을 합니다.
+                    - **근접 중심성**: 학생이 다른 모든 학생들과 얼마나 가까운지를 나타냅니다. 높을수록 정보를 빠르게 얻고 전달합니다.
+                    - **영향력**: 학생의 영향력을 나타냅니다. 높을수록 영향력이 큰 학생들과 연결되어 있습니다.
+                    - **소속 그룹**: 학생이 속한 그룹(커뮤니티) 번호입니다.
+                    """)
             
             with col2:
                 # 관계 네트워크 시각화
-                st.markdown("#### 학생 관계 네트워크")
+                st.markdown("#### 🌐 학생 관계 네트워크")
                 
                 # 1촌 네트워크 추출 (직접 연결된 학생들)
-                neighbors = list(self.graph.successors(selected_student_id)) + list(self.graph.predecessors(selected_student_id))
-                neighbors = list(set(neighbors))  # 중복 제거
+                successors = list(self.graph.successors(selected_student_id))  # 학생이 선택한 학생들
+                predecessors = list(self.graph.predecessors(selected_student_id))  # 학생을 선택한 학생들
+                neighbors = list(set(successors + predecessors))  # 중복 제거
                 
                 # 선택된 학생을 포함한 서브그래프 생성
                 subgraph_nodes = neighbors + [selected_student_id]
                 subgraph = self.graph.subgraph(subgraph_nodes)
                 
-                # 각 엣지의 방향 정보 추가
-                edge_info = []
-                for u, v in subgraph.edges():
-                    if u == selected_student_id:
-                        relation = "선택함"
-                    elif v == selected_student_id:
-                        relation = "선택받음"
-                    else:
-                        relation = "기타 관계"
-                    edge_info.append((u, v, relation))
+                # 네트워크 시각화 생성
+                try:
+                    # PyVis 네트워크 시각화
+                    from pyvis.network import Network
+                    import random
+                    
+                    # 네트워크 생성
+                    net = Network(height="400px", width="100%", directed=True, notebook=False)
+                    
+                    # 노드 추가
+                    for node in subgraph_nodes:
+                        # 선택된 학생은 크게 표시
+                        size = 25 if node == selected_student_id else 15
+                        
+                        # 노드 색상
+                        if node == selected_student_id:
+                            color = "#E53935"  # 선택된 학생
+                        elif node in successors and node in predecessors:
+                            color = "#43A047"  # 상호 선택
+                        elif node in successors:
+                            color = "#1E88E5"  # 학생이 선택한 학생
+                        elif node in predecessors:
+                            color = "#FB8C00"  # 학생을 선택한 학생
+                        else:
+                            color = "#9E9E9E"  # 기타 
+                        
+                        # 노드 추가 (실제 이름으로 표시)
+                        label = romanized_to_korean.get(node, str(node))
+                        net.add_node(node, label=label, size=size, color=color, title=f"학생: {label}")
+                    
+                    # 엣지 추가
+                    for u, v in subgraph.edges():
+                        # 엣지 색상 및 두께
+                        if u == selected_student_id:
+                            color = "#1E88E5"  # 학생이 선택한 관계
+                            title = f"{romanized_to_korean.get(u, u)}님이 {romanized_to_korean.get(v, v)}님을 선택함"
+                        elif v == selected_student_id:
+                            color = "#FB8C00"  # 학생을 선택한 관계
+                            title = f"{romanized_to_korean.get(u, u)}님이 {romanized_to_korean.get(v, v)}님을 선택함"
+                        else:
+                            color = "#9E9E9E"  # 기타 관계
+                            title = f"{romanized_to_korean.get(u, u)}님이 {romanized_to_korean.get(v, v)}님을 선택함"
+                        
+                        net.add_edge(u, v, color=color, title=title)
+                    
+                    # 물리 엔진 설정
+                    net.barnes_hut(spring_length=200)
+                    
+                    # HTML 생성 및 표시
+                    html = net.generate_html()
+                    components.html(html, height=410)
+                    
+                except Exception as e:
+                    # 오류 시 기본 네트워크 표시
+                    st.warning(f"네트워크 시각화 생성 중 오류: {str(e)}")
+                    
+                    # Plotly로 기본 네트워크 표시
+                    if hasattr(self.visualizer, 'create_plotly_network'):
+                        fig = self.visualizer.create_plotly_network(focus_node=selected_student_id, neighbor_depth=1)
+                        st.plotly_chart(fig, use_container_width=True)
                 
                 # 분석 내용 추가
-                incoming = len(list(self.graph.predecessors(selected_student_id)))
-                outgoing = len(list(self.graph.successors(selected_student_id)))
+                st.markdown("#### 📊 관계 분석")
+                incoming = len(predecessors)
+                outgoing = len(successors)
+                mutual = len(set(predecessors).intersection(set(successors)))
                 
-                st.markdown(f"**직접 관계:** {len(neighbors)}명의 학생과 연결됨")
-                st.markdown(f"**받은 선택:** {incoming}명의 학생이 선택함")
-                st.markdown(f"**한 선택:** {outgoing}명의 학생을 선택함")
+                st.markdown(f"**총 관계 수:** {len(neighbors)}명의 학생과 연결")
+                st.markdown(f"**받은 선택:** {incoming}명의 학생이 {selected_student_name}님을 선택")
+                st.markdown(f"**한 선택:** {selected_student_name}님이 {outgoing}명의 학생을 선택")
+                st.markdown(f"**상호 선택:** {mutual}명의 학생과 상호 선택 관계")
                 
-                # 이 학생의 네트워크를 시각화 (미니 네트워크)
-                # (여기서는 간단한 텍스트 기반 정보만 제공)
-                st.markdown("#### 직접 연결된 학생들")
-                
-                # 선택한 학생 & 선택받은 학생 목록
-                chosen_by = []
-                chosen = []
-                
-                for u, v in self.graph.edges():
-                    # 이 학생을 선택한 학생들
-                    if v == selected_student_id:
-                        student_name = romanized_to_korean.get(u, str(u))
-                        chosen_by.append(student_name)
+                # 관계 목록 추가
+                with st.expander("🔍 상세 관계 목록 보기"):
+                    # 학생을 선택한 학생 목록
+                    if predecessors:
+                        st.markdown("**나를 선택한 학생:**")
+                        for student in predecessors:
+                            st.markdown(f"- {romanized_to_korean.get(student, str(student))}")
+                    else:
+                        st.markdown("**나를 선택한 학생: 없음**")
                     
-                    # 이 학생이 선택한 학생들
-                    if u == selected_student_id:
-                        student_name = romanized_to_korean.get(v, str(v))
-                        chosen.append(student_name)
-                
-                # 두 열로 나누어 표시
-                col2_1, col2_2 = st.columns(2)
-                
-                with col2_1:
-                    st.markdown("**이 학생을 선택한 학생들:**")
-                    if chosen_by:
-                        for name in sorted(chosen_by):
-                            st.markdown(f"- {name}")
+                    # 학생이 선택한 학생 목록
+                    if successors:
+                        st.markdown("**내가 선택한 학생:**")
+                        for student in successors:
+                            st.markdown(f"- {romanized_to_korean.get(student, str(student))}")
                     else:
-                        st.markdown("이 학생을 선택한 학생이 없습니다.")
-                        
-                with col2_2:
-                    st.markdown("**이 학생이 선택한 학생들:**")
-                    if chosen:
-                        for name in sorted(chosen):
-                            st.markdown(f"- {name}")
-                    else:
-                        st.markdown("이 학생이 선택한 학생이 없습니다.")
+                        st.markdown("**내가 선택한 학생: 없음**")
             
             # 권장 전략/개입 제안
             st.markdown("### 교사 권장 사항")
@@ -1083,14 +1170,16 @@ class ReportGenerator:
         return recommendations
     
     def show_communities(self, network_data):
-        """커뮤니티 분석 결과 표시"""
+        """커뮤니티(하위 그룹) 분석 표시"""
         try:
-            if not self.communities:
-                st.warning("커뮤니티 정보가 없습니다.")
-                return
-                
-            # 커뮤니티 정보 표시
-            st.markdown("### 하위 그룹 구성")
+            st.markdown("## 👥 학급 내 하위 그룹 분석")
+            
+            # 설명 추가
+            st.markdown("""
+            이 분석은 학급 내에서 자연스럽게 형성된 하위 그룹(커뮤니티)을 보여줍니다.
+            같은 색상의 학생들은 서로 더 긴밀하게 연결된 하나의 그룹을 형성하고 있습니다.
+            이러한 그룹 파악은 학급 활동 구성, 모둠 편성, 또는 학생 관계 개선에 활용할 수 있습니다.
+            """)
             
             # 커뮤니티 테이블 생성
             community_table = self.visualizer.create_community_table()
@@ -1107,119 +1196,72 @@ class ReportGenerator:
             st.error("커뮤니티 분석 결과를 표시하는 중 오류가 발생했습니다.")
     
     def show_centrality_analysis(self, network_data):
-        """중심성 분석을 표시합니다"""
+        """중심성 분석 결과 표시"""
         try:
-            # 컨테이너 생성
-            container = st.container()
+            st.markdown("## 📊 중심성 지표 분석")
             
-            # 중심성 지표 섹션
-            with container:
-                # 중심성 개념 간략 설명
-                st.markdown("<div class='sub-header'>중심성 분석</div>", unsafe_allow_html=True)
-                st.markdown("""
-                중심성(Centrality)은 네트워크에서 각 노드의 중요도를 측정하는 지표입니다.
-                다양한 지표를 통해 학급 내 학생들의 역할을 파악할 수 있습니다.
-                """)
-                
-                # 중심성 지표 선택
-                # 세션 상태 초기화
-                if 'centrality_metric' not in st.session_state:
-                    st.session_state.centrality_metric = 'in_degree'
-                
-                # 지표 목록
-                metrics = {
-                    'in_degree': '인기도 (In-Degree)',
-                    'out_degree': '활동성 (Out-Degree)',
-                    'betweenness': '매개 중심성 (Betweenness)'
-                }
-                
-                # 레이아웃 설정
-                col1, col2 = st.columns([1, 3])
-                
-                with col1:
-                    # 중심성 지표 선택
-                    metric = st.selectbox(
-                        '중심성 지표:', 
-                        options=list(metrics.keys()),
-                        format_func=lambda x: metrics[x],
-                        index=list(metrics.keys()).index(st.session_state.centrality_metric),
-                        key='metric_selectbox'
-                    )
-                    
-                    # 세션 상태 업데이트
-                    st.session_state.centrality_metric = metric
-                    
-                    # 상위 표시 개수 선택
-                    top_n = st.slider(
-                        '상위 표시 개수:', 
-                        min_value=5, 
-                        max_value=20, 
-                        value=10,
-                        step=5,
-                        key='top_n_slider'
-                    )
-                
-                # 중심성 시각화
-                try:
-                    # 중심성 플롯 생성
-                    fig = self.visualizer.create_centrality_plot(metric=metric, top_n=top_n)
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.warning("중심성 시각화를 생성할 수 없습니다.")
-                except Exception as e:
-                    st.error(f"중심성 시각화 생성 중 오류: {str(e)}")
-                    logger.error(f"중심성 시각화 생성 중 오류: {str(e)}")
-                
-                # 중심성 테이블
-                try:
-                    # 중심성 데이터 가져오기
-                    centrality_data = self.visualizer.get_centrality_metrics()
-                    
-                    if centrality_data and metric in centrality_data:
-                        # 데이터 추출 및 정렬
-                        data = centrality_data[metric]
-                        data_list = [(k, v) for k, v in data.items()]
-                        data_list.sort(key=lambda x: x[1], reverse=True)
-                        data_list = data_list[:top_n]
-                        
-                        # 데이터프레임 생성
-                        df = pd.DataFrame(data_list, columns=['학생', f'{metrics[metric]} 점수'])
-                        
-                        # 한글 이름 처리
-                        if hasattr(self.visualizer, '_get_original_name'):
-                            df['학생'] = df['학생'].apply(lambda x: self.visualizer._get_original_name(x))
-                        
-                        # 값 반올림
-                        df[f'{metrics[metric]} 점수'] = df[f'{metrics[metric]} 점수'].apply(lambda x: round(x, 3))
-                        
-                        # 테이블 표시
-                        st.markdown(f"#### 상위 {top_n}명 학생")
-                        st.dataframe(df, use_container_width=True)
-                        
-                        # CSV 다운로드 버튼
-                        csv = df.to_csv(index=False).encode('utf-8-sig')
-                        st.download_button(
-                            label="CSV로 다운로드",
-                            data=csv,
-                            file_name=f'중심성_{metric}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-                            mime='text/csv',
-                        )
-                    else:
-                        st.warning(f"{metrics[metric]} 데이터를 사용할 수 없습니다.")
-                except Exception as e:
-                    st.error(f"중심성 테이블 생성 중 오류: {str(e)}")
-                    logger.error(f"중심성 테이블 생성 중 오류: {str(e)}")
-        
+            # 설명 추가
+            st.markdown("""
+            이 분석은 각 학생이 네트워크에서 얼마나 중요한 위치를 차지하는지 보여줍니다.
+            중심성 지표는 학생들의 영향력, 인기도, 매개 역할 등 다양한 관점에서의 중요도를 측정합니다.
+            다양한 지표를 통해 학급 내 주요 학생들의 역할을 파악할 수 있습니다.
+            """)
+            
+            # 중심성 선택 및 설명
+            st.markdown("### 중심성 지표 선택")
+            
+            # 중심성 유형 설명
+            centrality_explanation = {
+                "in_degree": "**인기도 (In-Degree)**: 다른 학생들로부터 받은 선택의 수입니다. 높을수록 많은 학생들에게 선택받은 인기 있는 학생입니다.",
+                "out_degree": "**활동성 (Out-Degree)**: 다른 학생들을 선택한 수입니다. 높을수록 적극적으로 관계를 형성하는 활동적인 학생입니다.",
+                "betweenness": "**매개 중심성 (Betweenness)**: 서로 다른 학생들 사이의 관계를 연결하는 중재자 역할을 얼마나 하는지 측정합니다. 높을수록 다양한 그룹 간 소통을 돕는 '다리' 역할을 합니다.",
+                "closeness": "**근접 중심성 (Closeness)**: 한 학생이 다른 모든 학생들과 얼마나 가까운지 측정합니다. 높을수록 정보를 빠르게 얻고 전달할 수 있는 위치에 있습니다.",
+                "eigenvector": "**영향력 중심성 (Eigenvector)**: 학생의 영향력을 측정합니다. 높을수록 중요한(영향력 있는) 학생들과 연결되어 있어 간접적 영향력이 큰 학생입니다."
+            }
+            
+            # 중심성 지표 선택 옵션
+            metric_options = list(centrality_explanation.keys())
+            selected_metric = st.selectbox("중심성 지표 선택:", options=metric_options)
+            
+            # 상위 학생 수 선택
+            top_n = st.slider("상위 학생 수:", min_value=5, max_value=20, value=10)
+            
+            # 중심성 그래프 생성
+            fig = self.visualizer.create_centrality_plot(metric=selected_metric, top_n=top_n)
+            st.pyplot(fig)
+            
+            # 중심성 데이터 표시
+            metrics_df = pd.DataFrame()
+            for name, values in self.metrics.items():
+                metrics_df[centrality_explanation.get(name, name)] = pd.Series(values)
+            
+            st.write("#### 전체 중심성 지표 데이터")
+            st.dataframe(metrics_df)
+            
+            # CSV 다운로드 버튼
+            csv = metrics_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="CSV로 다운로드",
+                data=csv,
+                file_name=f'중심성_{selected_metric}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                mime='text/csv',
+            )
+            
         except Exception as e:
             st.error(f"중심성 분석 섹션 생성 중 오류: {str(e)}")
             logger.error(f"중심성 분석 섹션 생성 중 오류: {str(e)}")
     
     def show_isolated_students(self, network_data):
-        """고립 학생 분석 결과 표시"""
+        """고립(소외) 학생 분석 표시"""
         try:
-            # 고립/외곽 학생 분석
-            st.markdown("### 고립 학생 분석")
+            st.markdown("## ⚠️ 관계망 주의 학생 분석")
+            
+            # 설명 추가
+            st.markdown("""
+            이 분석은 학급 내에서 상대적으로 적은 선택을 받거나 관계가 적은 학생들을 식별합니다.
+            이러한 학생들에게 특별한 관심을 기울이면 학급 내 모든 학생들이 건강한 관계를 형성하도록 도울 수 있습니다.
+            그러나 모든 학생의 성향이 다르므로, 이 결과만으로 학생의 사회성을 판단하지 않도록 주의해야 합니다.
+            """)
             
             # 고립 학생 검출
             isolated = []
@@ -1301,34 +1343,37 @@ class ReportGenerator:
             logger.error(traceback.format_exc())
             st.error("고립 학생 분석 결과를 표시하는 중 오류가 발생했습니다.")
     
-    def show_interactive_network(self):
-        """대화형 관계망 시각화 탭 표시"""
-        st.markdown("### 그래프 매개변수 설정")
-        
-        # 세션 상태 초기화
-        if 'current_layout' not in st.session_state:
-            st.session_state.current_layout = 'fruchterman'
-        
-        # 레이아웃 선택 (PyVis 호환 레이아웃으로 변경)
-        layout_options = {
-            'fruchterman': '표준 레이아웃',
-            'force': '힘 기반 레이아웃',
-            'circular': '원형 레이아웃'
-        }
-        
-        selected_layout = st.selectbox(
-            "레이아웃 선택:",
-            options=list(layout_options.keys()),
-            format_func=lambda x: layout_options[x],
-            index=0 if st.session_state.current_layout not in layout_options else list(layout_options.keys()).index(st.session_state.current_layout),
-            key="layout_selector"
-        )
-        st.session_state.current_layout = selected_layout
-        
-        st.markdown("<p class='description-text'>아래 그래프는 학생들 간의 관계를 시각화한 것입니다. 학생 노드에 마우스를 올리면 상세 정보가 표시됩니다. 노드를 드래그하여 위치를 조정할 수 있습니다.</p>", unsafe_allow_html=True)
-        
+    def show_interactive_network(self, network_data=None):
+        """대화형 네트워크 시각화 표시"""
         try:
-            # PyVis 네트워크 시각화 생성
+            st.markdown("## 🌐 대화형 관계망 시각화")
+            
+            # 설명 추가
+            st.markdown("""
+            이 시각화는 학급 전체의 관계망을 보여줍니다. 네트워크에서:
+            
+            * **노드(원)**: 각 학생을 나타냅니다. 크기가 클수록 많은 선택을 받은 학생입니다.
+            * **색상**: 같은 색상의 학생들은 같은 그룹(커뮤니티)에 속합니다.
+            * **화살표**: 한 학생이 다른 학생을 선택한 방향을 나타냅니다.
+            * **노드 위치**: 서로 많이 연결된 학생들이 더 가깝게 배치됩니다.
+            
+            마우스로 노드를 드래그하여 위치를 조정하거나, 노드를 클릭하여 해당 학생의 관계를 자세히 볼 수 있습니다.
+            확대/축소와 화면 이동도 가능합니다.
+            """)
+            
+            # 레이아웃 선택 (PyVis 호환 레이아웃으로 변경)
+            layout_options = {
+                'fruchterman': '표준 레이아웃',
+                'force': '힘 기반 레이아웃',
+                'circular': '원형 레이아웃'
+            }
+            
+            selected_layout = st.selectbox("레이아웃 선택:", options=list(layout_options.keys()))
+            
+            # 선택된 레이아웃 저장
+            st.session_state.current_layout = selected_layout
+            
+            # PyVis 네트워크 생성
             visualizer = self.visualizer  # 직접 visualizer 속성 사용
             pyvis_net = visualizer.create_pyvis_network(
                 layout=selected_layout,

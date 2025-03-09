@@ -505,21 +505,76 @@ def main():
 def show_analysis_results():
     """분석 결과 표시 페이지"""
     try:
-        # 사이드바 제거
-        st.markdown(
-            """
-            <style>
-            [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
-                width: 0px;
-            }
-            [data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
-                width: 0px;
-                margin-left: -500px;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+        # 사이드바에 컨트롤 추가
+        with st.sidebar:
+            st.header("분석 옵션")
+            
+            # 레이아웃 선택
+            layout_options = ["fruchterman", "force", "circular"]
+            selected_layout = st.selectbox(
+                "네트워크 레이아웃:", 
+                options=layout_options,
+                index=layout_options.index(st.session_state.get('layout_option', 'fruchterman')),
+                key="layout_selector"
+            )
+            
+            # 레이아웃 변경 시 세션 상태 업데이트
+            if selected_layout != st.session_state.get('layout_option', 'fruchterman'):
+                st.session_state.layout_option = selected_layout
+            
+            # 중심성 지표 선택
+            centrality_options = ["in_degree", "out_degree", "betweenness", "closeness", "eigenvector"]
+            centrality_labels = ["인기도(In-Degree)", "활동성(Out-Degree)", "매개 중심성", "근접 중심성", "고유벡터 중심성"]
+            
+            centrality_dict = {opt: label for opt, label in zip(centrality_options, centrality_labels)}
+            
+            selected_centrality = st.selectbox(
+                "중심성 지표:", 
+                options=centrality_options,
+                format_func=lambda x: centrality_dict.get(x, x),
+                index=centrality_options.index(st.session_state.get('centrality_metric', 'in_degree')),
+                key="centrality_selector"
+            )
+            
+            # 중심성 변경 시 세션 상태 업데이트
+            if selected_centrality != st.session_state.get('centrality_metric', 'in_degree'):
+                st.session_state.centrality_metric = selected_centrality
+            
+            st.markdown("---")
+            
+            # 내보내기 옵션
+            st.header("데이터 내보내기")
+            if st.button("분석 결과 CSV 내보내기", use_container_width=True):
+                csv_data = report_generator.export_to_csv()
+                st.download_button(
+                    label="CSV 파일 다운로드",
+                    data=csv_data,
+                    file_name="social_network_analysis_results.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            # 보고서 생성 버튼
+            if st.button("전체 보고서 생성", use_container_width=True):
+                report_pdf = report_generator.generate_pdf_report()
+                st.download_button(
+                    label="PDF 보고서 다운로드",
+                    data=report_pdf,
+                    file_name="social_network_analysis_report.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            
+            st.markdown("---")
+            
+            # 홈으로 돌아가기 버튼
+            if st.button("새 분석 시작하기", use_container_width=True):
+                # 세션 상태 초기화
+                for key in list(st.session_state.keys()):
+                    if key != 'page':
+                        del st.session_state[key]
+                st.session_state.page = 'upload'
+                st.rerun()
         
         # 결과가 있는지 안전하게 확인
         network_analyzer = st.session_state.get('network_analyzer')
@@ -594,36 +649,6 @@ def show_analysis_results():
         # 탭 5: 고립 학생 분석
         with tab5:
             report_generator.show_isolated_students(network_data)
-
-        # CSV 내보내기 버튼
-        st.sidebar.header("데이터 내보내기")
-        if st.sidebar.button("분석 결과 CSV 내보내기"):
-            csv_data = report_generator.export_to_csv()
-            st.sidebar.download_button(
-                label="CSV 파일 다운로드",
-                data=csv_data,
-                file_name="social_network_analysis_results.csv",
-                mime="text/csv",
-            )
-
-        # 보고서 생성 버튼
-        if st.sidebar.button("전체 보고서 생성"):
-            report_pdf = report_generator.generate_pdf_report()
-            st.sidebar.download_button(
-                label="PDF 보고서 다운로드",
-                data=report_pdf,
-                file_name="social_network_analysis_report.pdf",
-                mime="application/pdf",
-            )
-
-        # 홈으로 돌아가기 버튼
-        if st.sidebar.button("새 분석 시작하기"):
-            # 세션 상태 초기화
-            for key in list(st.session_state.keys()):
-                if key != 'page':
-                    del st.session_state[key]
-            st.session_state.page = 'upload'
-            st.rerun()
 
     except Exception as e:
         st.error(f"결과 표시 중 오류가 발생했습니다: {str(e)}")
