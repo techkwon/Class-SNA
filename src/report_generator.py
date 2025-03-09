@@ -394,15 +394,40 @@ class ReportGenerator:
                 
                 # 중심성 그래프 생성
                 fig = self.visualizer.create_centrality_plot(metric=selected_metric, top_n=top_n)
-                st.pyplot(fig)
                 
-                # 중심성 데이터 표시
-                metrics_df = pd.DataFrame()
-                for name, values in self.metrics.items():
-                    metrics_df[metric_options.get(name, name)] = pd.Series(values)
+                # fig 객체가 있는지 확인 후 표시
+                if fig is not None:
+                    st.pyplot(fig)  # fig 객체를 명시적으로 전달
+                else:
+                    st.warning(f"선택한 중심성 지표 ({selected_metric})에 대한 시각화를 생성할 수 없습니다. 데이터가 부족하거나 형식이 맞지 않을 수 있습니다.")
                 
-                st.write("#### 전체 중심성 지표 데이터")
-                st.dataframe(metrics_df)
+                # 중심성 데이터 표시 전에 metrics가 있는지 확인
+                if hasattr(self, 'metrics') and self.metrics:
+                    try:
+                        metrics_df = pd.DataFrame()
+                        for name, values in self.metrics.items():
+                            # 딕셔너리 형태인지 확인하고 시리즈로 변환
+                            if isinstance(values, dict):
+                                metrics_df[centrality_explanation.get(name, name)] = pd.Series(values)
+                        
+                        if not metrics_df.empty:
+                            st.write("#### 전체 중심성 지표 데이터")
+                            st.dataframe(metrics_df)
+                            
+                            # CSV 다운로드 버튼
+                            csv = metrics_df.to_csv(index=False).encode('utf-8-sig')
+                            st.download_button(
+                                label="CSV로 다운로드",
+                                data=csv,
+                                file_name=f'중심성_{selected_metric}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                                mime='text/csv',
+                            )
+                        else:
+                            st.warning("중심성 지표 데이터가 비어있습니다.")
+                    except Exception as e:
+                        st.error(f"중심성 지표 데이터 표시 중 오류: {str(e)}")
+                else:
+                    st.warning("중심성 지표 데이터가 없습니다.")
             
             with tab3:
                 # 활성 탭 설정
@@ -1228,24 +1253,40 @@ class ReportGenerator:
             
             # 중심성 그래프 생성
             fig = self.visualizer.create_centrality_plot(metric=selected_metric, top_n=top_n)
-            st.pyplot(fig)
             
-            # 중심성 데이터 표시
-            metrics_df = pd.DataFrame()
-            for name, values in self.metrics.items():
-                metrics_df[centrality_explanation.get(name, name)] = pd.Series(values)
+            # fig 객체가 있는지 확인 후 표시
+            if fig is not None:
+                st.pyplot(fig)  # fig 객체를 명시적으로 전달
+            else:
+                st.warning(f"선택한 중심성 지표 ({selected_metric})에 대한 시각화를 생성할 수 없습니다. 데이터가 부족하거나 형식이 맞지 않을 수 있습니다.")
             
-            st.write("#### 전체 중심성 지표 데이터")
-            st.dataframe(metrics_df)
-            
-            # CSV 다운로드 버튼
-            csv = metrics_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="CSV로 다운로드",
-                data=csv,
-                file_name=f'중심성_{selected_metric}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-                mime='text/csv',
-            )
+            # 중심성 데이터 표시 전에 metrics가 있는지 확인
+            if hasattr(self, 'metrics') and self.metrics:
+                try:
+                    metrics_df = pd.DataFrame()
+                    for name, values in self.metrics.items():
+                        # 딕셔너리 형태인지 확인하고 시리즈로 변환
+                        if isinstance(values, dict):
+                            metrics_df[centrality_explanation.get(name, name)] = pd.Series(values)
+                    
+                    if not metrics_df.empty:
+                        st.write("#### 전체 중심성 지표 데이터")
+                        st.dataframe(metrics_df)
+                        
+                        # CSV 다운로드 버튼
+                        csv = metrics_df.to_csv(index=False).encode('utf-8-sig')
+                        st.download_button(
+                            label="CSV로 다운로드",
+                            data=csv,
+                            file_name=f'중심성_{selected_metric}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                            mime='text/csv',
+                        )
+                    else:
+                        st.warning("중심성 지표 데이터가 비어있습니다.")
+                except Exception as e:
+                    st.error(f"중심성 지표 데이터 표시 중 오류: {str(e)}")
+            else:
+                st.warning("중심성 지표 데이터가 없습니다.")
             
         except Exception as e:
             st.error(f"중심성 분석 섹션 생성 중 오류: {str(e)}")

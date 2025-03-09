@@ -1275,13 +1275,28 @@ class NetworkVisualizer:
     def create_centrality_plot(self, metric="in_degree", top_n=10):
         """중심성 지표 시각화 (내부 처리는 영문, 표시는 한글)"""
         try:
+            # 메트릭스 존재 확인
+            if not hasattr(self, 'metrics') or not self.metrics:
+                logger.error(f"중심성 지표가 존재하지 않습니다.")
+                return None
+                
             # 지표 선택
             if metric not in self.metrics:
-                st.error(f"요청한 중심성 지표({metric})가 존재하지 않습니다.")
+                # 사용 가능한 지표 목록 표시
+                available_metrics = list(self.metrics.keys())
+                if available_metrics:
+                    logger.error(f"요청한 중심성 지표({metric})가 존재하지 않습니다. 사용 가능한 지표: {', '.join(available_metrics)}")
+                else:
+                    logger.error(f"요청한 중심성 지표({metric})가 존재하지 않으며, 사용 가능한 지표가 없습니다.")
                 return None
             
             # 선택된 지표 값 가져오기
             metric_values = self.metrics[metric]
+            
+            # 지표 값이 비어있는지 확인
+            if not metric_values:
+                logger.error(f"선택한 중심성 지표({metric}) 값이 비어있습니다.")
+                return None
             
             # 리스트 타입의 값을 처리하기 위한 정제 과정
             processed_values = {}
