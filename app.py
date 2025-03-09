@@ -244,6 +244,31 @@ def apply_global_css():
             color: #FFFFFF !important;
         }
     }
+    
+    /* Streamlit 알림창 스타일 */
+    .element-container div[data-testid="stAlert"] p {
+        color: #000000 !important;
+        font-weight: 500 !important;
+    }
+    
+    /* 다크모드 Streamlit 알림창 */
+    @media (prefers-color-scheme: dark) {
+        .element-container div[data-testid="stAlert"] {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+        }
+        .element-container div[data-testid="stAlert"] p {
+            color: #000000 !important;
+        }
+    }
+    
+    /* 성공 알림 메시지 */
+    .element-container div[data-baseweb="notification"] {
+        background-color: #ffffff !important;
+    }
+    
+    .element-container div[data-baseweb="notification"] div {
+        color: #000000 !important;
+    }
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -468,6 +493,14 @@ def upload_page():
                             # 네트워크 분석기 생성
                             network_analyzer = NetworkAnalyzer(network_data)
                             
+                            # 중심성 지표 계산
+                            if not hasattr(network_analyzer, 'metrics') or not network_analyzer.metrics:
+                                network_analyzer.calculate_centrality()
+                            
+                            # 커뮤니티 탐지
+                            if not hasattr(network_analyzer, 'communities') or not network_analyzer.communities:
+                                network_analyzer.detect_communities()
+                            
                             # 세션 상태에 저장
                             st.session_state.network_analyzer = network_analyzer
                             st.session_state.network_data = network_data
@@ -566,6 +599,14 @@ def upload_page():
                                     
                                     # 네트워크 분석기 생성
                                     network_analyzer = NetworkAnalyzer(network_data)
+                                    
+                                    # 중심성 지표 계산
+                                    if not hasattr(network_analyzer, 'metrics') or not network_analyzer.metrics:
+                                        network_analyzer.calculate_centrality()
+                                    
+                                    # 커뮤니티 탐지
+                                    if not hasattr(network_analyzer, 'communities') or not network_analyzer.communities:
+                                        network_analyzer.detect_communities()
                                     
                                     # 세션 상태에 저장
                                     st.session_state.network_analyzer = network_analyzer
