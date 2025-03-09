@@ -260,19 +260,35 @@ class NetworkVisualizer:
     """인터랙티브 네트워크 시각화를 담당하는 클래스"""
     
     def __init__(self, analyzer=None, graph=None, metrics=None, has_korean_font=False):
-        """
-        NetworkVisualizer 클래스 초기화
+        """NetworkVisualizer 초기화
         
         Args:
-            analyzer: NetworkAnalyzer 인스턴스 (선택)
-            graph: 네트워크 그래프 (선택)
-            metrics: 중심성 지표 (선택)
-            has_korean_font: 한글 폰트 사용 가능 여부
+            analyzer (NetworkAnalyzer, optional): 네트워크 분석기 객체. Defaults to None.
+            graph (nx.DiGraph, optional): 네트워크 그래프. Defaults to None.
+            metrics (dict, optional): 중심성 지표 딕셔너리. Defaults to None.
+            has_korean_font (bool, optional): 한글 폰트 사용 여부. Defaults to False.
         """
+        # 네트워크 분석기 설정
         self.analyzer = analyzer
-        self.G = graph
-        self.metrics = metrics
-        self.has_korean_font = False  # 로마자화 기본 사용
+        
+        # 그래프 설정
+        if graph is not None:
+            self.G = graph
+        elif analyzer is not None and hasattr(analyzer, 'graph'):
+            self.G = analyzer.graph
+        else:
+            self.G = nx.DiGraph()
+        
+        # G_viz 초기화
+        self.G_viz = None
+        
+        # 지표 설정
+        if metrics is not None:
+            self.metrics = metrics
+        elif analyzer is not None and hasattr(analyzer, 'metrics'):
+            self.metrics = analyzer.metrics
+        else:
+            self.metrics = {}
         
         # ID-이름 매핑 저장
         self.id_mapping = {}  # id -> name
@@ -281,16 +297,6 @@ class NetworkVisualizer:
                 
         # 글로벌 한글 폰트 설정 확인
         self._check_korean_font()
-        
-        # 애널라이저에서 그래프와 메트릭스 가져오기
-        if analyzer:
-            if not self.G and hasattr(analyzer, 'graph'):
-                self.G = analyzer.graph
-            elif not self.G and hasattr(analyzer, 'G'):
-                self.G = analyzer.G
-                
-            if not self.metrics and hasattr(analyzer, 'metrics'):
-                self.metrics = analyzer.metrics
         
         # 로마자화된 그래프 생성
         if self.G:
@@ -324,60 +330,48 @@ class NetworkVisualizer:
                     if hasattr(self.analyzer, 'id_to_name') and self.analyzer.id_to_name and node in self.analyzer.id_to_name:
                         original_name = self.analyzer.id_to_name.get(node, str(node))
                         name_found = True
-                    
-                    # 방법 2: analyzer의 name_mapping에서 찾기
+                    # 방법 2: analyzer의 name_mapping에서 이름 찾기
                     elif hasattr(self.analyzer, 'name_mapping') and self.analyzer.name_mapping and node in self.analyzer.name_mapping:
                         original_name = self.analyzer.name_mapping.get(node, str(node))
                         name_found = True
-                        
-                    # 방법 3: 노드 속성의 label 필드에서 찾기
-                    elif 'label' in attrs and attrs['label']:
-                        original_name = attrs['label']
+                    # 방법 3: reverse_romanized에서 이름 찾기
+                    elif hasattr(self.analyzer, 'reverse_romanized') and self.analyzer.reverse_romanized and node in self.analyzer.reverse_romanized:
+                        original_name = self.analyzer.reverse_romanized.get(node, str(node))
+                        name_found = True
+                    # 방법 4: 자체 네이밍 매핑에서 찾기
+                    elif hasattr(self, 'original_names') and self.original_names and node in self.original_names:
+                        original_name = self.original_names.get(node, str(node))
                         name_found = True
                     
-                    # 방법 4: 노드 속성의 name 필드에서 찾기
-                    elif 'name' in attrs and attrs['name']:
-                        original_name = attrs['name']
-                        name_found = True
+                    # 레이블 설정
+                    attrs['label'] = original_name
                     
-                    # 학생 ID 형식인 경우 (예: student_0, student_1 등)
-                    # 실제 이름으로 변환 시도
-                    if not name_found and isinstance(original_name, str) and original_name.startswith('student_'):
-                        # 이 부분은 데이터에 따라 실제 학생 이름을 매핑하는 로직 추가 필요
-                        # 현재는 그대로 유지
-                        pass
-                    
-                    # ID와 이름 매핑 저장
-                    self.id_mapping[node] = original_name
-                    self.name_mapping[original_name] = node
-                    
-                    # 원래 이름으로 노드 추가
-                    original_G.add_node(original_name, **attrs)
+                    # 노드 추가
+                    original_G.add_node(node, **attrs)
                     
                 except Exception as e:
-                    logger.warning(f"노드 {node} 처리 중 오류: {str(e)}")
-                    # 오류 시 원본 노드명 그대로 사용
-                    original_G.add_node(str(node))
+                    logger.warning(f"노드 {node} 원본 이름 변환 중 오류: {str(e)}")
+                    # 오류 발생 시 기본값으로 추가
+                    original_G.add_node(node, label=str(node))
             
-            # 엣지 추가
+            # 엣지 추가 (원래 그래프의 모든 엣지 속성 유지)
             for u, v, data in G.edges(data=True):
                 try:
-                    # 원래 이름으로 변환
-                    orig_u = self.id_mapping.get(u, str(u))
-                    orig_v = self.id_mapping.get(v, str(v))
-                    
-                    # 엣지 추가
-                    original_G.add_edge(orig_u, orig_v, **data)
+                    original_G.add_edge(u, v, **data)
                 except Exception as e:
-                    logger.warning(f"엣지 {u}-{v} 처리 중 오류: {str(e)}")
-                    # 오류 시 원본 노드명 그대로 사용
-                    original_G.add_edge(str(u), str(v))
+                    logger.warning(f"엣지 {u}->{v} 추가 중 오류: {str(e)}")
+                    # 오류 발생 시 기본값으로 추가
+                    original_G.add_edge(u, v)
+            
+            # G_viz에 저장
+            self.G_viz = original_G
             
             return original_G
+            
         except Exception as e:
-            logger.error(f"원래 이름 그래프 생성 중 오류: {str(e)}")
-            # 오류 시 빈 그래프 반환
-            return nx.DiGraph()
+            logger.error(f"원본 이름 그래프 생성 중 오류: {str(e)}")
+            # 실패 시 원본 그래프 반환
+            return G
     
     def _create_romanized_graph(self, G):
         """로마자화된 그래프 생성
@@ -1022,7 +1016,12 @@ class NetworkVisualizer:
             if not hasattr(self, 'G_viz') or not self.G_viz:
                 self._create_original_name_graph(self.G)
             
-            G_viz = self.G_viz
+            # G_viz가 여전히 None인 경우 기본 그래프 사용
+            if not self.G_viz:
+                logger.warning("G_viz가 없어 기본 그래프를 사용합니다.")
+                G_viz = self.G
+            else:
+                G_viz = self.G_viz
             
             # 커뮤니티 데이터가 있으면 색상 매핑 생성
             if hasattr(self, 'communities') and self.communities:

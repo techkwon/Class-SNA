@@ -158,7 +158,7 @@ def apply_global_css():
     }
     
     .instruction-box p, .instruction-box li {
-        color: #333;
+        color: #333 !important;
         font-weight: 500;
     }
     
@@ -216,6 +216,32 @@ def apply_global_css():
         .menu-button:hover {
             background-color: rgba(25, 118, 210, 0.3);
             color: white;
+        }
+    }
+    
+    /* 알림 메시지 컨테이너 */
+    .info-container {
+        background-color: #ffffff;
+        color: #000000 !important;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
+        border: 1px solid #e0e0e0;
+    }
+    
+    .info-container p, .info-container span, .info-container div {
+        color: #000000 !important;
+    }
+    
+    /* 다크모드 알림 메시지 컨테이너 */
+    @media (prefers-color-scheme: dark) {
+        .info-container {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: rgba(200, 200, 200, 0.2);
+        }
+        
+        .info-container p, .info-container span, .info-container div {
+            color: #FFFFFF !important;
         }
     }
     </style>
@@ -359,16 +385,17 @@ def upload_page():
     </div>
     """, unsafe_allow_html=True)
     
-    # 메뉴 바로가기 버튼
-    st.markdown("""
-    <div class="menu-buttons">
-        <a href="#학생-분석" class="menu-button">📊 학생 분석</a>
-        <a href="#대화형-네트워크" class="menu-button">🌐 대화형 네트워크</a>
-        <a href="#중심성-분석" class="menu-button">📈 중심성 분석</a>
-        <a href="#그룹-분석" class="menu-button">👥 그룹 분석</a>
-        <a href="#고립-학생" class="menu-button">⚠️ 고립 학생</a>
-    </div>
-    """, unsafe_allow_html=True)
+    # 메뉴 바로가기 버튼 - 분석이 완료된 경우에만 표시
+    if st.session_state.get('analyzed', False):
+        st.markdown("""
+        <div class="menu-buttons">
+            <a href="#학생-분석" class="menu-button">📊 학생 분석</a>
+            <a href="#대화형-네트워크" class="menu-button">🌐 대화형 네트워크</a>
+            <a href="#중심성-분석" class="menu-button">📈 중심성 분석</a>
+            <a href="#그룹-분석" class="menu-button">👥 그룹 분석</a>
+            <a href="#고립-학생" class="menu-button">⚠️ 고립 학생</a>
+        </div>
+        """, unsafe_allow_html=True)
     
     # 구글 설문지 링크 제공
     st.markdown("### 📋 샘플 설문지 사용하기")
@@ -387,18 +414,82 @@ def upload_page():
         uploaded_file = st.file_uploader("학생 관계 데이터 CSV 파일을 업로드하세요", type=["csv"], key="file_uploader")
         
         if uploaded_file is not None:
-            # 파일 업로드 처리
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
-                tmp.write(uploaded_file.getvalue())
-                tmp_path = tmp.name
-            
-            # 세션 상태에 저장
-            st.session_state.uploaded_file = tmp_path
-            st.session_state.sheet_url = ""  # URL 초기화
-            st.session_state.example_selected = ""  # 예시 선택 초기화
-            
-            st.success(f"파일 '{uploaded_file.name}'이 성공적으로 업로드되었습니다.")
-    
+            try:
+                # 파일 업로드 처리
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                # 세션 상태에 저장
+                st.session_state.uploaded_file = tmp_path
+                st.session_state.sheet_url = ""  # URL 초기화
+                st.session_state.example_selected = ""  # 예시 선택 초기화
+                
+                # 파일 내용 미리보기
+                df = pd.read_csv(uploaded_file)
+                st.success(f"파일 '{uploaded_file.name}'이 성공적으로 업로드되었습니다.")
+                
+                # 데이터 미리보기
+                st.subheader("데이터 미리보기")
+                st.dataframe(df.head())
+                
+                # CSV 파일용 분석 시작 버튼
+                if st.button("이 데이터로 분석 시작", key="analyze_csv_button"):
+                    with st.spinner("데이터 분석 중입니다..."):
+                        try:
+                            # 간소화된 진행 표시
+                            progress_bar = st.progress(0)
+                            progress_text = st.empty()
+                            
+                            # API 초기화 및 데이터 로드
+                            progress_text.text("데이터 로드 중...")
+                            progress_bar.progress(25)
+                            
+                            # API 매니저 초기화
+                            api_manager = APIManager()
+                            data_processor = DataProcessor(api_manager)
+                            
+                            progress_text.text("데이터 처리 중...")
+                            progress_bar.progress(50)
+                            
+                            # 업로드된 CSV 파일 로드
+                            network_data = data_processor.process_network_data(df)
+                            
+                            if not network_data:
+                                st.error("데이터 처리에 실패했습니다.")
+                                progress_bar.empty()
+                                progress_text.empty()
+                                return
+                            
+                            # 네트워크 분석
+                            progress_text.text("네트워크 분석 중...")
+                            progress_bar.progress(75)
+                            
+                            # 네트워크 분석기 생성
+                            network_analyzer = NetworkAnalyzer(network_data)
+                            
+                            # 세션 상태에 저장
+                            st.session_state.network_analyzer = network_analyzer
+                            st.session_state.network_data = network_data
+                            st.session_state.analyzed = True
+                            
+                            # 완료 표시
+                            progress_text.text("분석 완료!")
+                            progress_bar.progress(100)
+                            time.sleep(0.5)
+                            
+                            # 분석 결과 페이지로 전환
+                            st.session_state.page = 'analysis'
+                            st.rerun()
+                            
+                        except Exception as e:
+                            import traceback
+                            logger.error(f"CSV 분석 중 오류: {str(e)}")
+                            logger.error(traceback.format_exc())
+                            st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
+            except Exception as e:
+                st.error(f"파일 로드 중 오류가 발생했습니다: {str(e)}")
+
     with col2:
         st.markdown("### 📚 예시 데이터 사용")
         # 예시 목록 추출
@@ -424,106 +515,82 @@ def upload_page():
         if example_selection != st.session_state.get('example_selected', ''):
             st.session_state.example_selected = example_selection
             if example_selection:
-                # 예시 파일 경로 구성
-                example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{example_selection}.csv")
-                if os.path.exists(example_path):
-                    st.session_state.sheet_url = example_selection
-                    
-                    # 예시 데이터 설명 표시
-                    st.success(f"'{format_func(example_selection)}' 예시 데이터가 선택되었습니다.")
-                    st.markdown(get_example_description(example_selection))
-                else:
-                    st.error(f"예시 데이터 파일을 찾을 수 없습니다.")
-                    st.session_state.example_selected = ""
-    
-    # 분석 시작 버튼 (메인 화면)
-    has_input = bool(st.session_state.get('sheet_url', '')) or st.session_state.get('uploaded_file', None) is not None
-    
-    st.markdown("### 🚀 분석 시작")
-    
-    analyzer_button = st.button(
-        "네트워크 분석 시작하기", 
-        disabled=not has_input,
-        use_container_width=True,
-        key="analyze_button"
-    )
-    
-    # 상태 유지와 무관하게 버튼이 작동하도록 조건 수정
-    if analyzer_button:
-        with st.spinner("데이터 분석 중입니다..."):
-            try:
-                # 간소화된 진행 표시
-                progress_bar = st.progress(0)
-                progress_text = st.empty()
-                
-                # API 초기화 및 데이터 로드
-                progress_text.text("데이터 로드 중...")
-                progress_bar.progress(25)
-                
-                # API 매니저 초기화
-                api_manager = APIManager()
-                data_processor = DataProcessor(api_manager)
-                
-                progress_text.text("데이터 처리 중...")
-                progress_bar.progress(50)
-                
-                sheet_url = st.session_state.get('sheet_url', '')
-                uploaded_file_path = st.session_state.get('uploaded_file', None)
-                
-                # 데이터 소스에 따라 처리
-                if sheet_url.startswith("example"):
-                    # 예시 파일 로드
-                    example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{sheet_url}.csv")
+                try:
+                    # 예시 파일 경로 구성
+                    example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{example_selection}.csv")
                     if os.path.exists(example_path):
+                        st.session_state.sheet_url = example_selection
+                        
+                        # 예시 데이터 로드 및 미리보기
                         df = pd.read_csv(example_path)
-                        network_data = data_processor.process_network_data(df)
+                        
+                        # 예시 데이터 설명 표시
+                        st.success(f"'{format_func(example_selection)}' 예시 데이터가 선택되었습니다.")
+                        st.markdown(get_example_description(example_selection))
+                        
+                        # 데이터 미리보기
+                        st.subheader("데이터 미리보기")
+                        st.dataframe(df.head())
+                        
+                        # 예시 데이터용 분석 시작 버튼
+                        if st.button("이 데이터로 분석 시작", key="analyze_example_button"):
+                            with st.spinner("데이터 분석 중입니다..."):
+                                try:
+                                    # 간소화된 진행 표시
+                                    progress_bar = st.progress(0)
+                                    progress_text = st.empty()
+                                    
+                                    # API 초기화 및 데이터 로드
+                                    progress_text.text("데이터 로드 중...")
+                                    progress_bar.progress(25)
+                                    
+                                    # API 매니저 초기화
+                                    api_manager = APIManager()
+                                    data_processor = DataProcessor(api_manager)
+                                    
+                                    progress_text.text("데이터 처리 중...")
+                                    progress_bar.progress(50)
+                                    
+                                    # 데이터 처리
+                                    network_data = data_processor.process_network_data(df)
+                                    
+                                    if not network_data:
+                                        st.error("데이터 처리에 실패했습니다.")
+                                        progress_bar.empty()
+                                        progress_text.empty()
+                                        return
+                                    
+                                    # 네트워크 분석
+                                    progress_text.text("네트워크 분석 중...")
+                                    progress_bar.progress(75)
+                                    
+                                    # 네트워크 분석기 생성
+                                    network_analyzer = NetworkAnalyzer(network_data)
+                                    
+                                    # 세션 상태에 저장
+                                    st.session_state.network_analyzer = network_analyzer
+                                    st.session_state.network_data = network_data
+                                    st.session_state.analyzed = True
+                                    
+                                    # 완료 표시
+                                    progress_text.text("분석 완료!")
+                                    progress_bar.progress(100)
+                                    time.sleep(0.5)
+                                    
+                                    # 분석 결과 페이지로 전환
+                                    st.session_state.page = 'analysis'
+                                    st.rerun()
+                                    
+                                except Exception as e:
+                                    import traceback
+                                    logger.error(f"예시 데이터 분석 중 오류: {str(e)}")
+                                    logger.error(traceback.format_exc())
+                                    st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
                     else:
-                        st.error(f"예시 파일을 찾을 수 없습니다: {example_path}")
-                        progress_bar.empty()
-                        progress_text.empty()
-                        return
-                elif uploaded_file_path:
-                    # 업로드된 CSV 파일 로드
-                    df = pd.read_csv(uploaded_file_path)
-                    network_data = data_processor.process_network_data(df)
-                else:
-                    st.error("데이터 소스가 지정되지 않았습니다.")
-                    progress_bar.empty()
-                    progress_text.empty()
-                    return
-                
-                if not network_data:
-                    st.error("데이터 처리에 실패했습니다.")
-                    progress_bar.empty()
-                    progress_text.empty()
-                    return
-                
-                # 네트워크 분석
-                progress_text.text("네트워크 분석 중...")
-                progress_bar.progress(75)
-                
-                # 네트워크 분석기 생성
-                network_analyzer = NetworkAnalyzer(network_data)
-                
-                # 세션 상태에 저장
-                st.session_state.network_analyzer = network_analyzer
-                st.session_state.network_data = network_data
-                
-                # 완료 표시
-                progress_text.text("분석 완료!")
-                progress_bar.progress(100)
-                time.sleep(0.5)
-                
-                # 분석 결과 페이지로 전환
-                st.session_state.page = 'analysis'
-                st.rerun()
-            except Exception as e:
-                import traceback
-                logger.error(f"분석 시작 중 오류: {str(e)}")
-                logger.error(traceback.format_exc())
-                st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
-                progress_bar.empty()
-                progress_text.empty()
+                        st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
+                        st.session_state.example_selected = ""
+                except Exception as e:
+                    st.error(f"예시 데이터 로드 중 오류가 발생했습니다: {str(e)}")
 
 def check_and_create_assets():
     """필요한 디렉토리와 자산 파일들을 확인하고 생성합니다"""
