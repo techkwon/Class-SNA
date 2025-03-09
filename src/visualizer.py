@@ -765,33 +765,33 @@ class NetworkVisualizer:
                             betweenness_val = 0
                     
                     # 호버 텍스트 생성
-                    hover_text = f"<b>{node_label}</b><br>"
-                    hover_text += f"인기도: {in_degree_val:.3f}<br>"
-                    hover_text += f"활동성: {out_degree_val:.3f}<br>"
-                    hover_text += f"매개성: {betweenness_val:.3f}<br>"
+                    hover_text = f"{node_label}\n"
+                    hover_text += f"인기도: {in_degree_val:.3f}\n"
+                    hover_text += f"활동성: {out_degree_val:.3f}\n"
+                    hover_text += f"매개성: {betweenness_val:.3f}\n"
                     
                     # 연결 수 정보
                     in_edges = G.in_degree(node)
                     out_edges = G.out_degree(node)
-                    hover_text += f"받은 선택: {in_edges}개<br>"
-                    hover_text += f"한 선택: {out_edges}개"
+                    hover_text += f"받은 선택: {in_edges}명\n"
+                    hover_text += f"한 선택: {out_edges}명"
                     
                     # 커뮤니티 정보 추가
                     if communities and node in communities:
                         try:
                             comm = communities[node]
-                            hover_text += f"<br>그룹: {comm}"
-                        except (KeyError, NameError):
-                            pass  # community_data 정의되지 않은 경우 건너뛰기
+                            hover_text += f"\n그룹: {comm}"
+                        except Exception as e:
+                            logger.warning(f"노드 {node} 정보 설정 중 오류: {str(e)}")
                     
                     # 중심 노드 표시
                     if focus_node is not None and node == focus_node:
-                        hover_text += "<br><b>중심 노드</b>"
+                        hover_text += "\n중심 노드"
                         # 원래 이름 추가 (이미 원본 이름 사용 중이므로 필요 없음)
                     elif focus_node is not None:
-                        hover_text += "<br>클릭: 이 학생 중심 보기"
+                        hover_text += "\n클릭: 이 학생 중심 보기"
                     else:
-                        hover_text += "<br>클릭: 이 학생 중심 보기"
+                        hover_text += "\n클릭: 이 학생 중심 보기"
                     
                     node_hover.append(hover_text)
                 except Exception as e:
@@ -1079,7 +1079,7 @@ class NetworkVisualizer:
                 # 툴팁 정보 설정 (호버 시 표시)
                 try:
                     # 노드 기본 정보
-                    title = f"<b>{node_attr.get('label', node)}</b><br>"
+                    title = f"{node_attr.get('label', node)}\n"
                     
                     # 중심성 지표 추가
                     in_deg = 0
@@ -1098,19 +1098,19 @@ class NetworkVisualizer:
                     if communities and node in communities:
                         try:
                             comm = communities[node]
-                            title += f"소속 그룹: {comm}<br>"
+                            title += f"소속 그룹: {comm}\n"
                         except Exception as e:
                             logger.warning(f"노드 {node} 정보 설정 중 오류: {str(e)}")
                     
                     # 중심성 지표 표시
-                    title += f"인기도: {in_deg:.3f}<br>"
-                    title += f"활동성: {out_deg:.3f}<br>"
-                    title += f"매개성: {bet:.3f}<br>"
+                    title += f"인기도: {in_deg:.3f}\n"
+                    title += f"활동성: {out_deg:.3f}\n"
+                    title += f"매개성: {bet:.3f}\n"
                     
                     # 연결 정보
                     in_edges = G.in_degree(node)
                     out_edges = G.out_degree(node)
-                    title += f"받은 선택: {in_edges}명<br>"
+                    title += f"받은 선택: {in_edges}명\n"
                     title += f"한 선택: {out_edges}명"
                     
                     # 노드 추가
