@@ -978,6 +978,38 @@ class NetworkVisualizer:
                 logging.error("빈 그래프로 PyVis 네트워크를 생성할 수 없습니다.")
                 return None
             
+            # 정규화 함수 정의 - 누락된 함수 추가
+            def normalize(values, min_size=10, max_size=30):
+                """값을 지정된 범위로 정규화합니다 (문자열 처리 포함)"""
+                if not values:
+                    return {}
+                
+                # 문자열을 숫자로 변환하여 정규화 처리
+                numeric_values = {}
+                for k, v in values.items():
+                    try:
+                        # 문자열이나 다른 타입을 float로 변환 시도
+                        numeric_values[k] = float(v)
+                    except (ValueError, TypeError):
+                        # 변환 실패 시 기본값 0 사용
+                        numeric_values[k] = 0.0
+                
+                # 빈 딕셔너리 체크
+                if not numeric_values:
+                    return {}
+                
+                # 최소값과 최대값 계산
+                min_val = min(numeric_values.values())
+                max_val = max(numeric_values.values())
+                
+                # 모든 값이 동일한 경우
+                if min_val == max_val:
+                    return {k: (max_size + min_size) / 2 for k in numeric_values.keys()}
+                
+                # 정규화 계산
+                return {k: min_size + (v - min_val) * (max_size - min_size) / (max_val - min_val) 
+                        for k, v in numeric_values.items()}
+            
             # 정규화
             # 인기도(in-degree) 기반 노드 크기 계산
             in_degree = nx.in_degree_centrality(G)
@@ -996,6 +1028,16 @@ class NetworkVisualizer:
             
             # 색상 매핑
             color_map = {}
+            if community_data:
+                unique_communities = set(community_data.values())
+                colors = plt.cm.tab20(np.linspace(0, 1, len(unique_communities)))
+                
+                community_colors = {comm: f"rgba({int(r*255)},{int(g*255)},{int(b*255)},{a})" 
+                                    for comm, (r, g, b, a) in zip(unique_communities, colors)}
+                
+                for node, comm in community_data.items():
+                    if node in G.nodes():
+                        color_map[node] = community_colors[comm]
             
             # PyVis 네트워크 초기화
             net = Network(height=height, width=width, directed=True, notebook=False)
@@ -1061,7 +1103,14 @@ class NetworkVisualizer:
                 
                 # 노드 크기 및 색상
                 size = node_sizes.get(node, 15)
-                color = node_colors.get(node, "#97C2FC")
+                
+                # 색상 설정 (커뮤니티 기반 또는 기본값)
+                if node in color_map:
+                    color = color_map[node]
+                else:
+                    # 매개 중심성 기반 색상
+                    color_intensity = node_colors.get(node, 0.5)
+                    color = f"rgba(75, 192, 192, {color_intensity})"
                 
                 # 중심성 지표 가져오기
                 in_degree_val = in_degree.get(node, 0)
