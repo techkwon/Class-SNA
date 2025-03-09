@@ -14,6 +14,9 @@ from src.visualizer import NetworkVisualizer, set_korean_font
 from src.report_generator import ReportGenerator
 from src.utils import set_streamlit_page_config, show_footer, check_and_create_assets, handle_error
 
+# 앱 버전 정보
+APP_VERSION = "0.8"
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -391,7 +394,7 @@ def get_example_description(example_name):
 def upload_page():
     """데이터 업로드 및 분석 시작 페이지"""
     # 메인 화면 상단 설명
-    st.title("교실 소셜 네트워크 분석 도구")
+    st.title(f"교실 소셜 네트워크 분석 도구 v{APP_VERSION}")
     st.markdown("""
     이 도구는 학급 내 학생들 간의 관계를 시각화하고 분석하여 학급 운영에 도움을 주는 도구입니다.
     설문조사나 CSV 파일로 수집된 학생 관계 데이터를 분석하여 다양한 네트워크 시각화와 지표를 제공합니다.
@@ -401,12 +404,12 @@ def upload_page():
     st.markdown("""
     <div class="instruction-box">
         <h4>📌 사용 방법</h4>
-        <ul>
-            <li><strong>노드를 드래그하여 위치 조정</strong></li>
-            <li><strong>마우스 휠로 확대/축소</strong></li>
-            <li><strong>노드에 마우스를 올리면 상세 정보 표시</strong></li>
-            <li><strong>네트워크 여백을 드래그하면 전체 화면 이동</strong></li>
-        </ul>
+        <ol>
+            <li><strong>CSV 파일 업로드:</strong> 학생 관계 데이터가 포함된 CSV 파일을 업로드합니다.</li>
+            <li><strong>또는 예시 데이터 다운로드:</strong> 오른쪽에서 예시 데이터를 다운로드하여 CSV 파일로 저장합니다.</li>
+            <li><strong>분석 시작:</strong> CSV 파일 업로드 후 '이 데이터로 분석 시작' 버튼을 클릭합니다.</li>
+            <li><strong>결과 확인:</strong> 다양한 탭에서 학급 관계 분석 결과를 확인할 수 있습니다.</li>
+        </ol>
     </div>
     """, unsafe_allow_html=True)
     
@@ -525,6 +528,11 @@ def upload_page():
 
     with col2:
         st.markdown("### 📚 예시 데이터 사용")
+        st.markdown("""
+        아래에서 예시 데이터를 선택하여 다운로드 후, CSV 파일 업로드를 통해 분석할 수 있습니다.
+        예시 데이터는 학생들의 관계 네트워크를 분석하기 위한 기본 형태를 보여줍니다.
+        """)
+        
         # 예시 목록 추출
         example_options = get_example_data_files()
         
@@ -552,81 +560,29 @@ def upload_page():
                     # 예시 파일 경로 구성
                     example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{example_selection}.csv")
                     if os.path.exists(example_path):
-                        st.session_state.sheet_url = example_selection
-                        
-                        # 예시 데이터 로드 및 미리보기
-                        df = pd.read_csv(example_path)
-                        
                         # 예시 데이터 설명 표시
                         st.success(f"'{format_func(example_selection)}' 예시 데이터가 선택되었습니다.")
                         st.markdown(get_example_description(example_selection))
                         
                         # 데이터 미리보기
-                        st.subheader("데이터 미리보기")
-                        st.dataframe(df.head())
-                        
-                        # 예시 데이터용 분석 시작 버튼
-                        if st.button("이 데이터로 분석 시작", key="analyze_example_button"):
-                            with st.spinner("데이터 분석 중입니다..."):
-                                try:
-                                    # 간소화된 진행 표시
-                                    progress_bar = st.progress(0)
-                                    progress_text = st.empty()
-                                    
-                                    # API 초기화 및 데이터 로드
-                                    progress_text.text("데이터 로드 중...")
-                                    progress_bar.progress(25)
-                                    
-                                    # API 매니저 초기화
-                                    api_manager = APIManager()
-                                    data_processor = DataProcessor(api_manager)
-                                    
-                                    progress_text.text("데이터 처리 중...")
-                                    progress_bar.progress(50)
-                                    
-                                    # 데이터 처리
-                                    network_data = data_processor.process_network_data(df)
-                                    
-                                    if not network_data:
-                                        st.error("데이터 처리에 실패했습니다.")
-                                        progress_bar.empty()
-                                        progress_text.empty()
-                                        return
-                                    
-                                    # 네트워크 분석
-                                    progress_text.text("네트워크 분석 중...")
-                                    progress_bar.progress(75)
-                                    
-                                    # 네트워크 분석기 생성
-                                    network_analyzer = NetworkAnalyzer(network_data)
-                                    
-                                    # 중심성 지표 계산
-                                    if not hasattr(network_analyzer, 'metrics') or not network_analyzer.metrics:
-                                        network_analyzer.calculate_centrality()
-                                    
-                                    # 커뮤니티 탐지
-                                    if not hasattr(network_analyzer, 'communities') or not network_analyzer.communities:
-                                        network_analyzer.detect_communities()
-                                    
-                                    # 세션 상태에 저장
-                                    st.session_state.network_analyzer = network_analyzer
-                                    st.session_state.network_data = network_data
-                                    st.session_state.analyzed = True
-                                    
-                                    # 완료 표시
-                                    progress_text.text("분석 완료!")
-                                    progress_bar.progress(100)
-                                    time.sleep(0.5)
-                                    
-                                    # 분석 결과 페이지로 전환
-                                    st.session_state.page = 'analysis'
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    import traceback
-                                    logger.error(f"예시 데이터 분석 중 오류: {str(e)}")
-                                    logger.error(traceback.format_exc())
-                                    st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
+                        try:
+                            df = pd.read_csv(example_path)
+                            st.subheader("데이터 미리보기")
+                            st.dataframe(df.head())
+                            
+                            # 파일 다운로드 버튼
+                            with open(example_path, 'rb') as file:
+                                csv_data = file.read()
+                                st.download_button(
+                                    label="이 예시 데이터 다운로드",
+                                    data=csv_data,
+                                    file_name=f"{example_selection}.csv",
+                                    mime="text/csv",
+                                    key="download_example",
+                                    help="이 예시 데이터를 다운로드하여 CSV 파일로 저장한 후, 왼쪽의 CSV 파일 업로드를 통해 분석할 수 있습니다."
+                                )
+                        except Exception as e:
+                            st.error(f"데이터 미리보기 중 오류가 발생했습니다: {str(e)}")
                     else:
                         st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
                         st.session_state.example_selected = ""
@@ -680,9 +636,9 @@ def main():
             st.rerun()
             
         # 푸터
-        st.markdown("""
+        st.markdown(f"""
         <div style="text-align: center; margin-top: 40px; color: #888;">
-            <p>© 2025 학급 관계 네트워크 분석 시스템 | 소셜 네트워크 분석 도구</p>
+            <p>© 2025 학급 관계 네트워크 분석 시스템 | 소셜 네트워크 분석 도구 | 버전 {APP_VERSION}</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -707,6 +663,14 @@ def main():
 def show_analysis_results():
     """분석 결과 표시 페이지"""
     try:
+        st.title(f"학급 관계망 분석 결과 v{APP_VERSION}")
+        
+        # 학생 관계 시각화 및 분석 결과를 보여줍니다
+        st.markdown("""
+        학급 내 학생들 간의 관계를 다양한 방식으로 시각화하고 분석한 결과입니다.
+        아래 탭에서 각 분석 결과를 확인할 수 있습니다.
+        """)
+        
         # 사이드바에 컨트롤 추가
         with st.sidebar:
             st.header("분석 옵션")
