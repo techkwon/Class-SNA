@@ -951,107 +951,146 @@ class NetworkVisualizer:
             # 네트워크 객체 생성
             net = Network(height=height, width=width, directed=True, notebook=False)
             
+            # 레이아웃 기반 물리 엔진 설정
+            physics_options = {}
+            
+            if layout == "kamada_kawai":
+                physics_options = {
+                    "barnesHut": {
+                        "gravitationalConstant": -5000,
+                        "centralGravity": 0.1,
+                        "springLength": 150,
+                        "springConstant": 0.04,
+                        "damping": 0.09,
+                        "avoidOverlap": 0.8
+                    }
+                }
+            elif layout == "fruchterman":
+                physics_options = {
+                    "repulsion": {
+                        "nodeDistance": 200,
+                        "centralGravity": 0.2,
+                        "springLength": 200,
+                        "springConstant": 0.05,
+                        "damping": 0.09
+                    }
+                }
+            elif layout == "force":
+                physics_options = {
+                    "forceAtlas2Based": {
+                        "gravitationalConstant": -50,
+                        "centralGravity": 0.01,
+                        "springLength": 100,
+                        "springConstant": 0.08,
+                        "damping": 0.4,
+                        "avoidOverlap": 0.5
+                    }
+                }
+            else:
+                # 기본 물리 엔진 설정
+                physics_options = {
+                    "barnesHut": {
+                        "gravitationalConstant": -3000,
+                        "centralGravity": 0.3,
+                        "springLength": 120,
+                        "springConstant": 0.04,
+                        "damping": 0.09,
+                        "avoidOverlap": 0.5
+                    }
+                }
+            
             # 사용자 정의 옵션 설정 - 최적화된 설정으로 교체
-            net.set_options("""
-            {
-              "nodes": {
-                "font": {
-                  "size": 16,
-                  "face": "Noto Sans KR, Malgun Gothic, sans-serif",
-                  "color": "#333333",
-                  "strokeWidth": 2,
-                  "strokeColor": "#ffffff"
+            options = {
+                "nodes": {
+                    "font": {
+                        "size": 16,
+                        "face": "Noto Sans KR, Malgun Gothic, sans-serif",
+                        "color": "#333333",
+                        "strokeWidth": 2,
+                        "strokeColor": "#ffffff"
+                    },
+                    "borderWidth": 2,
+                    "borderWidthSelected": 4,
+                    "shadow": True,
+                    "shape": "dot",
+                    "scaling": {
+                        "min": 10,
+                        "max": 30,
+                        "label": {
+                            "enabled": True,
+                            "min": 12,
+                            "max": 18
+                        }
+                    }
                 },
-                "borderWidth": 2,
-                "borderWidthSelected": 4,
-                "shadow": true,
-                "shape": "dot",
-                "scaling": {
-                  "min": 10,
-                  "max": 30,
-                  "label": {
-                    "enabled": true,
-                    "min": 12,
-                    "max": 18
-                  }
+                "edges": {
+                    "color": {
+                        "color": "#606060",
+                        "highlight": "#2196F3",
+                        "hover": "#009688",
+                        "inherit": False
+                    },
+                    "smooth": {
+                        "enabled": True,
+                        "type": "dynamic",
+                        "roundness": 0.5
+                    },
+                    "font": {
+                        "face": "Noto Sans KR, Malgun Gothic, sans-serif",
+                        "size": 12,
+                        "color": "#333333",
+                        "strokeWidth": 2,
+                        "strokeColor": "#ffffff",
+                        "align": "horizontal"
+                    },
+                    "width": 2,
+                    "selectionWidth": 3,
+                    "hoverWidth": 2,
+                    "arrows": {
+                        "to": {
+                            "enabled": True,
+                            "scaleFactor": 0.6,
+                            "type": "arrow"
+                        }
+                    }
+                },
+                "interaction": {
+                    "dragNodes": True,
+                    "dragView": True,
+                    "hideEdgesOnDrag": False,
+                    "hideNodesOnDrag": False,
+                    "hover": True,
+                    "navigationButtons": True,
+                    "multiselect": True,
+                    "selectable": True,
+                    "selectConnectedEdges": True,
+                    "hoverConnectedEdges": True,
+                    "zoomView": True,
+                    "keyboard": {
+                        "enabled": True,
+                        "bindToWindow": False
+                    }
+                },
+                "physics": {
+                    "enabled": True,
+                    "stabilization": {
+                        "enabled": True,
+                        "iterations": 1000,
+                        "updateInterval": 50,
+                        "fit": True
+                    },
+                    **physics_options  # 레이아웃별 물리 설정 추가
+                },
+                "layout": {
+                    "improvedLayout": True,
+                    "hierarchical": {
+                        "enabled": False
+                    }
                 }
-              },
-              "edges": {
-                "color": {
-                  "color": "#606060",
-                  "highlight": "#2196F3",
-                  "hover": "#009688",
-                  "inherit": false
-                },
-                "smooth": {
-                  "enabled": true,
-                  "type": "dynamic",
-                  "roundness": 0.5
-                },
-                "font": {
-                  "face": "Noto Sans KR, Malgun Gothic, sans-serif",
-                  "size": 12,
-                  "color": "#333333",
-                  "strokeWidth": 2,
-                  "strokeColor": "#ffffff",
-                  "align": "horizontal"
-                },
-                "width": 2,
-                "selectionWidth": 3,
-                "hoverWidth": 2,
-                "arrows": {
-                  "to": {
-                    "enabled": true,
-                    "scaleFactor": 0.6,
-                    "type": "arrow"
-                  }
-                }
-              },
-              "interaction": {
-                "dragNodes": true,
-                "dragView": true,
-                "hideEdgesOnDrag": false,
-                "hideNodesOnDrag": false,
-                "hover": true,
-                "navigationButtons": true,
-                "multiselect": true,
-                "selectable": true,
-                "selectConnectedEdges": true,
-                "hoverConnectedEdges": true,
-                "zoomView": true,
-                "keyboard": {
-                  "enabled": true,
-                  "bindToWindow": false
-                }
-              },
-              "physics": {
-                "enabled": true,
-                "stabilization": {
-                  "enabled": true,
-                  "iterations": 1000,
-                  "updateInterval": 50,
-                  "fit": true
-                },
-                "barnesHut": {
-                  "gravitationalConstant": -5000,
-                  "centralGravity": 0.1,
-                  "springLength": 150,
-                  "springConstant": 0.04,
-                  "damping": 0.09,
-                  "avoidOverlap": 0.8
-                },
-                "repulsion": {
-                  "nodeDistance": 200
-                }
-              },
-              "layout": {
-                "improvedLayout": true,
-                "hierarchical": {
-                  "enabled": false
-                }
-              }
             }
-            """)
+            
+            # 네트워크 옵션 설정
+            net.options = options
             
             # 커뮤니티 정보 가져오기
             communities = None
@@ -1213,18 +1252,6 @@ class NetworkVisualizer:
                     logger.warning(f"엣지 {u}-{v} 추가 중 오류: {str(e)}")
                     # 기본 설정으로 엣지 추가
                     net.add_edge(u, v)
-            
-            # 레이아웃 설정
-            if layout == "kamada_kawai":
-                net.barnes_hut(gravity=-5000, central_gravity=0.1, spring_length=150)
-            elif layout == "fruchterman":
-                net.repulsion(node_distance=200, central_gravity=0.2, spring_length=200)
-            elif layout == "force":
-                net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=100)
-            elif layout == "circular":
-                # Circular 레이아웃은 PyVis에서 직접 지원하지 않음
-                # 노드들을 원형으로 배치할 수 있는 초기 위치 계산
-                pass
             
             return net
         
