@@ -710,31 +710,6 @@ def show_analysis_results():
         with st.sidebar:
             # 헤더 삭제 및 분석 옵션 섹션 삭제
             
-            # 내보내기 옵션
-            st.header("데이터 내보내기")
-            if st.button("분석 결과 CSV 내보내기", use_container_width=True):
-                csv_data = report_generator.export_to_csv()
-                st.download_button(
-                    label="CSV 파일 다운로드",
-                    data=csv_data,
-                    file_name="social_network_analysis_results.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            
-            # 보고서 생성 버튼
-            if st.button("전체 보고서 생성", use_container_width=True):
-                report_pdf = report_generator.generate_pdf_report()
-                st.download_button(
-                    label="PDF 보고서 다운로드",
-                    data=report_pdf,
-                    file_name="social_network_analysis_report.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            
-            st.markdown("---")
-            
             # 홈으로 돌아가기 버튼
             if st.button("새 분석 시작하기", use_container_width=True):
                 # 세션 상태 초기화
