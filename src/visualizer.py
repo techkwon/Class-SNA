@@ -1060,44 +1060,64 @@ class NetworkVisualizer:
             # 한글 폰트 적용
             net = apply_korean_font_to_pyvis(net)
             
-            # 레이아웃 설정
-            layout_options = {
-                "fruchterman": {"springLength": 250, "springConstant": 0.01, "damping": 0.09},
-                "force": {"springLength": 100, "springConstant": 0.05, "damping": 0.09, "centralGravity": 0.1},
-                "circular": {}
-            }
-            
-            # 레이아웃 설정
-            if layout in layout_options:
-                # 선택된 레이아웃으로 물리 옵션 설정
-                physics_options = layout_options[layout]
-                
-                if layout == "circular":
-                    # 원형 레이아웃은 물리 비활성화하고 원형으로 배치
-                    net.set_options("""
-                    {
-                        "physics": {
-                            "enabled": false
-                        },
-                        "layout": {
-                            "circular": {
-                                "enabled": true
-                            }
+            # 네트워크 옵션 설정
+            # 이전 set_options 호출 대신 옵션을 직접 설정합니다
+            net.options = {
+                "nodes": {
+                    "font": {
+                        "size": 16,
+                        "face": "Noto Sans KR"
+                    },
+                    "shape": "dot",
+                    "borderWidth": 2,
+                    "borderWidthSelected": 4
+                },
+                "edges": {
+                    "color": {
+                        "inherit": "both"
+                    },
+                    "smooth": {
+                        "enabled": True,
+                        "type": "dynamic"
+                    },
+                    "arrows": {
+                        "to": {
+                            "enabled": True,
+                            "scaleFactor": 0.5
                         }
                     }
-                    """)
-                else:
-                    # 물리 기반 레이아웃
-                    physics_json = json.dumps(physics_options)
-                    net.set_options(f"""
-                    {{
-                        "physics": {{
-                            "enabled": true,
-                            "forceAtlas2Based": {physics_json},
-                            "solver": "forceAtlas2Based"
-                        }}
-                    }}
-                    """)
+                },
+                "physics": {
+                    "enabled": True,
+                    "solver": layout,
+                },
+                "interaction": {
+                    "hover": True,
+                    "navigationButtons": True,
+                    "multiselect": True
+                },
+                "configure": {
+                    "enabled": True,
+                    "filter": ["physics"]
+                }
+            }
+            
+            # 레이아웃별 물리 설정 추가
+            if layout == "fruchterman":
+                net.options["physics"]["barnesHut"] = {
+                    "gravitationalConstant": -2000,
+                    "centralGravity": 0.1,
+                    "springLength": 95,
+                    "springConstant": 0.04,
+                    "damping": 0.09
+                }
+            elif layout == "force":
+                net.options["physics"]["forceAtlas2Based"] = {
+                    "gravitationalConstant": -50,
+                    "centralGravity": 0.01,
+                    "springLength": 100,
+                    "springConstant": 0.08
+                }
             
             # 정점 레이블 매핑 (원래 한글 이름으로 표시)
             node_labels = {}
@@ -1175,43 +1195,6 @@ class NetworkVisualizer:
                 
                 # 엣지 추가
                 net.add_edge(u, v, title=title, width=width, color=edge_color)
-            
-            # 네트워크 옵션 설정
-            net.set_options("""
-            {
-                "nodes": {
-                    "font": {
-                        "size": 16,
-                        "face": "Noto Sans KR"
-                    },
-                    "shape": "dot",
-                    "borderWidth": 2,
-                    "borderWidthSelected": 4
-                },
-                "edges": {
-                    "arrows": {
-                        "to": {
-                            "enabled": true,
-                            "scaleFactor": 0.5
-                        }
-                    },
-                    "color": {
-                        "inherit": false
-                    },
-                    "smooth": {
-                        "enabled": true,
-                        "type": "continuous"
-                    }
-                },
-                "interaction": {
-                    "hover": true,
-                    "navigationButtons": true,
-                    "keyboard": {
-                        "enabled": true
-                    }
-                }
-            }
-            """)
             
             # 툴팁이 HTML 태그를 그대로 보여주는 문제 해결
             # 자바스크립트를 이용해 툴팁 텍스트를 적절히 포맷팅
