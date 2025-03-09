@@ -1306,33 +1306,36 @@ class NetworkVisualizer:
                     processed_values[k] = v
             
             # 데이터프레임 변환 및 정렬
-            df = pd.DataFrame(processed_values.items(), columns=['name', 'value'])
+            df = pd.DataFrame(processed_values.items(), columns=['student_id', 'value'])
             
             # 이름이 문자열이 아닌 경우 문자열로 변환
-            df['name'] = df['name'].apply(lambda x: str(x) if not isinstance(x, str) else x)
+            df['student_id'] = df['student_id'].apply(lambda x: str(x) if not isinstance(x, str) else x)
             
             df = df.sort_values('value', ascending=False).head(top_n)
             
-            # 실제 학생 이름으로 변환 (여러 매핑 방식 시도)
-            real_names = {}
-            for student_id in df['name']:
+            # 학생 ID 목록으로 학생 이름 대조표 만들기
+            # student_id -> 실제 이름 매핑 수집
+            name_mapping = {}
+            for student_id in df['student_id']:
+                # 여러 매핑 방식 시도
+                real_name = None
+                
                 # 1. analyzer의 name_mapping 사용 (ID -> 이름)
                 if hasattr(self, 'analyzer') and hasattr(self.analyzer, 'name_mapping') and student_id in self.analyzer.name_mapping:
-                    real_names[student_id] = self.analyzer.name_mapping[student_id]
+                    real_name = self.analyzer.name_mapping[student_id]
                 # 2. analyzer의 reverse_romanized 사용 (로마자 -> 한글)
                 elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'reverse_romanized') and student_id in self.analyzer.reverse_romanized:
-                    real_names[student_id] = self.analyzer.reverse_romanized[student_id]
+                    real_name = self.analyzer.reverse_romanized[student_id]
                 # 3. 자체 original_names 매핑 사용
                 elif hasattr(self, 'original_names') and student_id in self.original_names:
-                    real_names[student_id] = self.original_names[student_id]
+                    real_name = self.original_names[student_id]
                 # 4. 변환 실패 시 원래 ID 그대로 사용
                 else:
-                    real_names[student_id] = student_id
-            
-            # 영문 이름으로 데이터프레임 변환
-            df['display_name'] = df['name'].map(real_names)
-            
-            # matplotlib 기본 폰트 설정 (영문 사용으로 한글 문제 우회)
+                    real_name = str(student_id)
+                    
+                name_mapping[student_id] = real_name
+                
+            # matplotlib 기본 폰트 설정 (영문 사용)
             plt.rcParams['font.family'] = 'DejaVu Sans'
             
             # 그래프 생성
@@ -1348,23 +1351,23 @@ class NetworkVisualizer:
             bars = ax.barh(y_pos, df['value'], 
                          color=[colors[i % len(colors)] for i in range(len(df))])
             
-            # Y축 레이블 설정 (위치에 표시 이름 매핑)
+            # Y축 레이블 설정 (ID 표시)
             ax.set_yticks(y_pos)
-            ax.set_yticklabels(df['display_name'])
+            ax.set_yticklabels(df['student_id'])
             
             # 그래프 스타일링 
-            ax.set_xlabel('중심성 값', fontsize=12)
+            ax.set_xlabel('Centrality Value', fontsize=12)
             
-            # 중심성 지표별 적절한 제목 설정
+            # 중심성 지표별 적절한 제목 설정 (영문)
             metric_titles = {
-                'in_degree': '인기도 (In-Degree)',
-                'out_degree': '활동성 (Out-Degree)',
-                'betweenness': '매개 중심성 (Betweenness)',
-                'closeness': '근접 중심성 (Closeness)',
-                'eigenvector': '영향력 중심성 (Eigenvector)'
+                'in_degree': 'In-Degree Centrality',
+                'out_degree': 'Out-Degree Centrality',
+                'betweenness': 'Betweenness Centrality',
+                'closeness': 'Closeness Centrality',
+                'eigenvector': 'Eigenvector Centrality'
             }
             title = metric_titles.get(metric, metric)
-            ax.set_title(f'상위 {top_n}명 학생 - {title}', fontsize=14, pad=20)
+            ax.set_title(f'Top {top_n} Students - {title}', fontsize=14, pad=20)
             
             # 값 주석 추가
             for bar in bars:
@@ -1377,6 +1380,19 @@ class NetworkVisualizer:
             
             # 레이아웃 조정
             plt.tight_layout()
+            
+            # 학생 ID와 실제 이름 대조표 추가 (Streamlit 표시 용)
+            st.markdown("### 📋 학생 ID-이름 대조표")
+            st.markdown("아래 표는 그래프에 표시된 학생 ID와 실제 이름의 대응표입니다.")
+            
+            # 대조표 데이터프레임 생성
+            mapping_df = pd.DataFrame({
+                "학생 ID": list(name_mapping.keys()),
+                "실제 이름": list(name_mapping.values())
+            })
+            
+            # 대조표 표시
+            st.dataframe(mapping_df, use_container_width=True)
             
             return fig
             

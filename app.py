@@ -58,40 +58,87 @@ def apply_global_css():
     /* 알림 스타일 */
     .alert {
         padding: 0.75rem 1.25rem;
-        border: 1px solid transparent;
-        border-radius: 0.25rem;
         margin-bottom: 1rem;
+        border-radius: 0.25rem;
     }
     
-    .alert-info {
-        color: #0c5460;
-        background-color: #d1ecf1;
-        border-color: #bee5eb;
-    }
-    
-    .alert-warning {
-        color: #856404;
-        background-color: #fff3cd;
-        border-color: #ffeeba;
-    }
-    
-    /* 다크 모드 지원 */
+    /* 다크모드 대응 스타일 */
     @media (prefers-color-scheme: dark) {
+        .main-header, .sub-header {
+            color: #90CAF9 !important;
+        }
+        
         .card {
-            background-color: #1e1e1e;
-            border-color: #333333;
+            background-color: rgba(49, 51, 63, 0.4) !important;
+            border-color: rgba(100, 100, 100, 0.4) !important;
         }
         
-        .alert-info {
-            color: #d1ecf1;
-            background-color: #0c5460;
-            border-color: #0c5460;
+        .stTextInput, .stSelectbox, .stDateInput {
+            color: #FFFFFF !important;
         }
         
-        .alert-warning {
-            color: #fff3cd;
-            background-color: #856404;
-            border-color: #856404;
+        p, span, label, div {
+            color: #FFFFFF !important;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            color: #90CAF9 !important;
+        }
+        
+        .stDataFrame {
+            color: #FFFFFF !important;
+        }
+        
+        .stTable th {
+            background-color: rgba(100, 100, 100, 0.2) !important;
+            color: #FFFFFF !important;
+        }
+        
+        .stTable td {
+            color: #FFFFFF !important;
+        }
+    }
+    
+    /* 이미지 및 아이콘 스타일 */
+    .icon-img {
+        width: 64px;
+        height: 64px;
+        margin-right: 1rem;
+    }
+    
+    /* 버튼 스타일 */
+    .stButton>button {
+        font-weight: bold !important;
+    }
+    
+    /* 푸터 스타일 */
+    .footer {
+        text-align: center;
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #f0f0f0;
+        font-size: 0.8rem;
+        color: #666;
+    }
+    
+    /* 링크 박스 스타일 */
+    .link-box {
+        padding: 10px;
+        background-color: #f1f8ff;
+        border: 1px solid #cce5ff;
+        border-radius: 4px;
+        margin: 10px 0;
+    }
+    
+    /* 다크모드 링크 박스 */
+    @media (prefers-color-scheme: dark) {
+        .link-box {
+            background-color: rgba(30, 136, 229, 0.2);
+            border-color: rgba(30, 136, 229, 0.4);
+        }
+        
+        .link-box a {
+            color: #90CAF9 !important;
         }
     }
     </style>
@@ -215,6 +262,46 @@ def get_example_description(example_name):
 
 def upload_page():
     """데이터 업로드 및 분석 시작 페이지"""
+    # 메인 화면 상단 설명
+    st.title("교실 소셜 네트워크 분석 도구")
+    st.markdown("""
+    이 도구는 학급 내 학생들 간의 관계를 시각화하고 분석하여 학급 운영에 도움을 주는 도구입니다.
+    설문조사나 CSV 파일로 수집된 학생 관계 데이터를 분석하여 다양한 네트워크 시각화와 지표를 제공합니다.
+    """)
+    
+    # 구글 설문지 링크 제공
+    st.markdown("### 📋 샘플 설문지 사용하기")
+    st.markdown("""
+    아래 링크를 클릭하면 학급 관계 분석을 위한 구글 설문지 템플릿을 복사하여 사용할 수 있습니다.
+    설문지를 복사한 후 질문 내용을 수정하고, 학생들에게 공유하여 데이터를 수집할 수 있습니다.
+    """)
+    
+    st.markdown('<div class="link-box"><b>구글 설문지 템플릿:</b> <a href="https://docs.google.com/forms/d/1OOpDNUMp3GIooYb0PgvTUHpMJqfHxY7fMGNRAM_Xez8/copy" target="_blank">복사하여 사용하기 (클릭)</a></div>', unsafe_allow_html=True)
+    
+    st.markdown("### 📊 분석 방법")
+    st.markdown("""
+    1. 예시 데이터를 사용하거나 CSV 파일을 업로드하세요.
+    2. 사이드바에서 '분석 시작' 버튼을 클릭하세요.
+    3. 네트워크 그래프와 다양한 분석 결과를 확인하세요.
+    """)
+    
+    # CSV 파일 업로드 섹션
+    st.markdown("### 🔄 CSV 파일 업로드")
+    uploaded_file = st.file_uploader("학생 관계 데이터 CSV 파일을 업로드하세요", type=["csv"], key="file_uploader")
+    
+    if uploaded_file is not None:
+        # 파일 업로드 처리
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+            tmp.write(uploaded_file.getvalue())
+            tmp_path = tmp.name
+        
+        # 세션 상태에 저장
+        st.session_state.uploaded_file = tmp_path
+        st.session_state.sheet_url = ""  # URL 초기화
+        st.session_state.example_selected = ""  # 예시 선택 초기화
+        
+        st.success(f"파일 '{uploaded_file.name}'이 성공적으로 업로드되었습니다. 사이드바에서 '분석 시작' 버튼을 클릭하세요.")
+    
     # 사이드바
     with st.sidebar:
         st.markdown("### 데이터 입력")
