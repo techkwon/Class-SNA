@@ -15,7 +15,7 @@ from src.report_generator import ReportGenerator
 from src.utils import set_streamlit_page_config, show_footer, check_and_create_assets, handle_error
 
 # 앱 버전 정보
-APP_VERSION = "0.8"
+APP_VERSION = "1.0"
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -673,40 +673,7 @@ def show_analysis_results():
         
         # 사이드바에 컨트롤 추가
         with st.sidebar:
-            st.header("분석 옵션")
-            
-            # 레이아웃 선택
-            layout_options = ["fruchterman", "force", "circular"]
-            selected_layout = st.selectbox(
-                "네트워크 레이아웃:", 
-                options=layout_options,
-                index=layout_options.index(st.session_state.get('layout_option', 'fruchterman')),
-                key="layout_selector"
-            )
-            
-            # 레이아웃 변경 시 세션 상태 업데이트
-            if selected_layout != st.session_state.get('layout_option', 'fruchterman'):
-                st.session_state.layout_option = selected_layout
-            
-            # 중심성 지표 선택
-            centrality_options = ["in_degree", "out_degree", "betweenness", "closeness", "eigenvector"]
-            centrality_labels = ["인기도(In-Degree)", "활동성(Out-Degree)", "매개 중심성", "근접 중심성", "고유벡터 중심성"]
-            
-            centrality_dict = {opt: label for opt, label in zip(centrality_options, centrality_labels)}
-            
-            selected_centrality = st.selectbox(
-                "중심성 지표:", 
-                options=centrality_options,
-                format_func=lambda x: centrality_dict.get(x, x),
-                index=centrality_options.index(st.session_state.get('centrality_metric', 'in_degree')),
-                key="centrality_selector"
-            )
-            
-            # 중심성 변경 시 세션 상태 업데이트
-            if selected_centrality != st.session_state.get('centrality_metric', 'in_degree'):
-                st.session_state.centrality_metric = selected_centrality
-            
-            st.markdown("---")
+            # 헤더 삭제 및 분석 옵션 섹션 삭제
             
             # 내보내기 옵션
             st.header("데이터 내보내기")
@@ -741,6 +708,10 @@ def show_analysis_results():
                         del st.session_state[key]
                 st.session_state.page = 'upload'
                 st.rerun()
+                
+            # 하단에 Made by TechKwon 추가
+            st.markdown("---")
+            st.markdown("<div style='text-align: center; color: #888;'>Made by TechKwon</div>", unsafe_allow_html=True)
         
         # 결과가 있는지 안전하게 확인
         network_analyzer = st.session_state.get('network_analyzer')
