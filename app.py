@@ -141,6 +141,83 @@ def apply_global_css():
             color: #90CAF9 !important;
         }
     }
+    
+    /* 사용 방법 안내 박스 */
+    .instruction-box {
+        background-color: #e8f4f8;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 15px 0;
+        border-left: 4px solid #2196F3;
+    }
+    
+    .instruction-box h4 {
+        color: #0D47A1;
+        margin-top: 0;
+        font-weight: 600;
+    }
+    
+    .instruction-box p, .instruction-box li {
+        color: #333;
+        font-weight: 500;
+    }
+    
+    /* 다크모드 사용 방법 안내 박스 */
+    @media (prefers-color-scheme: dark) {
+        .instruction-box {
+            background-color: rgba(33, 150, 243, 0.1);
+            border-left: 4px solid #2196F3;
+        }
+        
+        .instruction-box h4 {
+            color: #90CAF9;
+        }
+        
+        .instruction-box p, .instruction-box li {
+            color: #FFFFFF !important;
+            font-weight: 600;
+        }
+    }
+    
+    /* 메뉴 바로가기 버튼 */
+    .menu-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 15px 0;
+    }
+    
+    .menu-button {
+        padding: 8px 16px;
+        border-radius: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: bold;
+        text-decoration: none;
+        background-color: #f0f7ff;
+        border: 1px solid #90CAF9;
+        color: #1976D2;
+    }
+    
+    .menu-button:hover {
+        background-color: #90CAF9;
+        color: white;
+    }
+    
+    /* 다크모드 메뉴 버튼 */
+    @media (prefers-color-scheme: dark) {
+        .menu-button {
+            background-color: rgba(25, 118, 210, 0.1);
+            border: 1px solid #90CAF9;
+            color: #90CAF9;
+        }
+        
+        .menu-button:hover {
+            background-color: rgba(25, 118, 210, 0.3);
+            color: white;
+        }
+    }
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -269,6 +346,30 @@ def upload_page():
     설문조사나 CSV 파일로 수집된 학생 관계 데이터를 분석하여 다양한 네트워크 시각화와 지표를 제공합니다.
     """)
     
+    # 사용 방법 안내 박스
+    st.markdown("""
+    <div class="instruction-box">
+        <h4>📌 사용 방법</h4>
+        <ul>
+            <li><strong>노드를 드래그하여 위치 조정</strong></li>
+            <li><strong>마우스 휠로 확대/축소</strong></li>
+            <li><strong>노드에 마우스를 올리면 상세 정보 표시</strong></li>
+            <li><strong>네트워크 여백을 드래그하면 전체 화면 이동</strong></li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 메뉴 바로가기 버튼
+    st.markdown("""
+    <div class="menu-buttons">
+        <a href="#학생-분석" class="menu-button">📊 학생 분석</a>
+        <a href="#대화형-네트워크" class="menu-button">🌐 대화형 네트워크</a>
+        <a href="#중심성-분석" class="menu-button">📈 중심성 분석</a>
+        <a href="#그룹-분석" class="menu-button">👥 그룹 분석</a>
+        <a href="#고립-학생" class="menu-button">⚠️ 고립 학생</a>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # 구글 설문지 링크 제공
     st.markdown("### 📋 샘플 설문지 사용하기")
     st.markdown("""
@@ -278,39 +379,28 @@ def upload_page():
     
     st.markdown('<div class="link-box"><b>구글 설문지 템플릿:</b> <a href="https://docs.google.com/forms/d/1OOpDNUMp3GIooYb0PgvTUHpMJqfHxY7fMGNRAM_Xez8/copy" target="_blank">복사하여 사용하기 (클릭)</a></div>', unsafe_allow_html=True)
     
-    st.markdown("### 📊 분석 방법")
-    st.markdown("""
-    1. 예시 데이터를 사용하거나 CSV 파일을 업로드하세요.
-    2. 사이드바에서 '분석 시작' 버튼을 클릭하세요.
-    3. 네트워크 그래프와 다양한 분석 결과를 확인하세요.
-    """)
+    # 데이터 입력 영역
+    col1, col2 = st.columns([1, 1])
     
-    # CSV 파일 업로드 섹션
-    st.markdown("### 🔄 CSV 파일 업로드")
-    uploaded_file = st.file_uploader("학생 관계 데이터 CSV 파일을 업로드하세요", type=["csv"], key="file_uploader")
+    with col1:
+        st.markdown("### 📤 CSV 파일 업로드")
+        uploaded_file = st.file_uploader("학생 관계 데이터 CSV 파일을 업로드하세요", type=["csv"], key="file_uploader")
+        
+        if uploaded_file is not None:
+            # 파일 업로드 처리
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+                tmp.write(uploaded_file.getvalue())
+                tmp_path = tmp.name
+            
+            # 세션 상태에 저장
+            st.session_state.uploaded_file = tmp_path
+            st.session_state.sheet_url = ""  # URL 초기화
+            st.session_state.example_selected = ""  # 예시 선택 초기화
+            
+            st.success(f"파일 '{uploaded_file.name}'이 성공적으로 업로드되었습니다.")
     
-    if uploaded_file is not None:
-        # 파일 업로드 처리
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
-            tmp.write(uploaded_file.getvalue())
-            tmp_path = tmp.name
-        
-        # 세션 상태에 저장
-        st.session_state.uploaded_file = tmp_path
-        st.session_state.sheet_url = ""  # URL 초기화
-        st.session_state.example_selected = ""  # 예시 선택 초기화
-        
-        st.success(f"파일 '{uploaded_file.name}'이 성공적으로 업로드되었습니다. 사이드바에서 '분석 시작' 버튼을 클릭하세요.")
-    
-    # 사이드바
-    with st.sidebar:
-        st.markdown("### 데이터 입력")
-        st.markdown("업로드한 CSV 파일 또는 예시 데이터를 사용하여 분석합니다.")
-        
-        # 예시 데이터 섹션
-        st.markdown("### 예시 데이터")
-        st.markdown("테스트용 예시 데이터를 선택하세요:")
-        
+    with col2:
+        st.markdown("### 📚 예시 데이터 사용")
         # 예시 목록 추출
         example_options = get_example_data_files()
         
@@ -319,11 +409,11 @@ def upload_page():
         
         # 빈 선택지 추가
         all_options = [""] + example_options
-        format_func = lambda x: "선택하세요" if x == "" else f"{x}: {example_titles.get(x, x)}"
+        format_func = lambda x: "선택하세요" if x == "" else f"{example_titles.get(x, x)}"
         
         # 예시 선택 드롭다운
         example_selection = st.selectbox(
-            "예시 데이터 선택:", 
+            "예시 데이터를 선택하세요:", 
             options=all_options,
             index=0,
             format_func=format_func,
@@ -340,173 +430,100 @@ def upload_page():
                     st.session_state.sheet_url = example_selection
                     
                     # 예시 데이터 설명 표시
-                    st.success(f"'{example_titles.get(example_selection, example_selection)}' 예시 데이터가 선택되었습니다.")
+                    st.success(f"'{format_func(example_selection)}' 예시 데이터가 선택되었습니다.")
                     st.markdown(get_example_description(example_selection))
                 else:
-                    st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
+                    st.error(f"예시 데이터 파일을 찾을 수 없습니다.")
                     st.session_state.example_selected = ""
-        
-        # 분석 버튼 - 파일 업로드 또는 예시 데이터 선택 시에만 활성화
-        has_input = bool(st.session_state.get('sheet_url', '')) or st.session_state.get('uploaded_file', None) is not None
-        analyzer_button = st.button(
-            "분석 시작", 
-            disabled=not has_input,
-            use_container_width=True,
-            key="analyze_button"
-        )
-        
-        # 상태 유지와 무관하게 버튼이 작동하도록 조건 수정
-        if analyzer_button:
-            with st.spinner("데이터 분석 중입니다..."):
-                try:
-                    # 간소화된 진행 표시
-                    progress_bar = st.progress(0)
-                    progress_text = st.empty()
-                    
-                    # API 초기화 및 데이터 로드
-                    progress_text.text("데이터 로드 중...")
-                    progress_bar.progress(25)
-                    
-                    # API 매니저 초기화
-                    api_manager = APIManager()
-                    data_processor = DataProcessor(api_manager)
-                    
-                    # 데이터 처리
-                    progress_text.text("데이터 처리 중...")
-                    progress_bar.progress(50)
-                    
-                    sheet_url = st.session_state.get('sheet_url', '')
-                    
-                    # 파일 또는 URL에서 데이터 로드
-                    if sheet_url.startswith("example"):
-                        # 예시 파일 로드
-                        example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{sheet_url}.csv")
-                        if os.path.exists(example_path):
-                            df = pd.read_csv(example_path)
-                            network_data = data_processor.process_network_data(df)
-                        else:
-                            st.error(f"예시 파일을 찾을 수 없습니다: {example_path}")
-                            progress_bar.empty()
-                            progress_text.empty()
-                            return
+    
+    # 분석 시작 버튼 (메인 화면)
+    has_input = bool(st.session_state.get('sheet_url', '')) or st.session_state.get('uploaded_file', None) is not None
+    
+    st.markdown("### 🚀 분석 시작")
+    
+    analyzer_button = st.button(
+        "네트워크 분석 시작하기", 
+        disabled=not has_input,
+        use_container_width=True,
+        key="analyze_button"
+    )
+    
+    # 상태 유지와 무관하게 버튼이 작동하도록 조건 수정
+    if analyzer_button:
+        with st.spinner("데이터 분석 중입니다..."):
+            try:
+                # 간소화된 진행 표시
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+                
+                # API 초기화 및 데이터 로드
+                progress_text.text("데이터 로드 중...")
+                progress_bar.progress(25)
+                
+                # API 매니저 초기화
+                api_manager = APIManager()
+                data_processor = DataProcessor(api_manager)
+                
+                progress_text.text("데이터 처리 중...")
+                progress_bar.progress(50)
+                
+                sheet_url = st.session_state.get('sheet_url', '')
+                uploaded_file_path = st.session_state.get('uploaded_file', None)
+                
+                # 데이터 소스에 따라 처리
+                if sheet_url.startswith("example"):
+                    # 예시 파일 로드
+                    example_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', f"{sheet_url}.csv")
+                    if os.path.exists(example_path):
+                        df = pd.read_csv(example_path)
+                        network_data = data_processor.process_network_data(df)
                     else:
-                        # 구글 시트에서 데이터 로드
-                        network_data = data_processor.process_survey_data(sheet_url)
-                    
-                    if not network_data:
-                        st.error("데이터 처리에 실패했습니다.")
+                        st.error(f"예시 파일을 찾을 수 없습니다: {example_path}")
                         progress_bar.empty()
                         progress_text.empty()
                         return
-                    
-                    # 네트워크 분석 수행
-                    progress_text.text("네트워크 분석 중...")
-                    progress_bar.progress(75)
-                    
-                    # 네트워크 분석기 생성
-                    network_analyzer = NetworkAnalyzer(network_data)
-                    
-                    # 세션 상태에 저장
-                    st.session_state.network_analyzer = network_analyzer
-                    st.session_state.network_data = network_data
-                    
-                    # 진행 완료
-                    progress_bar.progress(100)
-                    progress_text.text("분석 완료!")
-                    time.sleep(0.5)
+                elif uploaded_file_path:
+                    # 업로드된 CSV 파일 로드
+                    df = pd.read_csv(uploaded_file_path)
+                    network_data = data_processor.process_network_data(df)
+                else:
+                    st.error("데이터 소스가 지정되지 않았습니다.")
                     progress_bar.empty()
                     progress_text.empty()
-                    
-                    # 분석 결과 페이지로 전환
-                    st.session_state.page = 'analysis'
-                    st.rerun()
-                    
-                except Exception as e:
-                    import traceback
-                    logger.error(f"데이터 분석 중 오류: {str(e)}")
-                    logger.error(traceback.format_exc())
-                    if 'progress_bar' in locals():
-                        progress_bar.empty()
-                    if 'progress_text' in locals():
-                        progress_text.empty()
-                    st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
-        
-        # 세션 초기화 버튼
-        if st.button("🗑️ 초기화", use_container_width=True, key="reset_button"):
-            reset_session()
-            st.rerun()
-    
-    # 메인 컨텐츠
-    st.markdown("## 데이터 업로드")
-    
-    st.info("""
-    **데이터 형식 안내**
-    - 구글 시트 또는 CSV 파일로 데이터를 준비하세요
-    - 첫 번째 열: 학생 ID 또는 이름
-    - 두 번째 열부터: 학생들이 선택한 다른 학생들
-    """)
-    
-    upload_container = st.container()
-    
-    with upload_container:
-        # 파일 업로드 기능
-        uploaded_file = st.file_uploader("Excel 또는 CSV 파일 업로드", type=["xlsx", "csv"])
-        
-        if uploaded_file is not None:
-            try:
-                # 파일 형식에 따라 다른 방식으로 로드
-                if uploaded_file.name.endswith('.csv'):
-                    df = pd.read_csv(uploaded_file)
-                else:
-                    df = pd.read_excel(uploaded_file)
+                    return
                 
-                # 데이터 미리보기
-                st.subheader("데이터 미리보기")
-                st.dataframe(df.head())
+                if not network_data:
+                    st.error("데이터 처리에 실패했습니다.")
+                    progress_bar.empty()
+                    progress_text.empty()
+                    return
                 
-                # 분석 버튼
-                if st.button("이 데이터로 분석 시작", key="analyze_uploaded_file"):
-                    with st.spinner("데이터 분석 중입니다..."):
-                        try:
-                            # API 및 데이터 처리기 초기화
-                            api_manager = APIManager()
-                            data_processor = DataProcessor(api_manager)
-                            
-                            # 데이터 처리
-                            network_data = data_processor.process_network_data(df)
-                            
-                            if not network_data:
-                                st.error("데이터 처리에 실패했습니다.")
-                                return
-                            
-                            # 네트워크 분석기 생성
-                            network_analyzer = NetworkAnalyzer(network_data)
-                            
-                            # 세션 상태에 저장
-                            st.session_state.network_analyzer = network_analyzer
-                            st.session_state.network_data = network_data
-                            
-                            # 분석 결과 페이지로 전환
-                            st.session_state.page = 'analysis'
-                            st.rerun()
-                            
-                        except Exception as e:
-                            import traceback
-                            logger.error(f"업로드 파일 분석 중 오류: {str(e)}")
-                            logger.error(traceback.format_exc())
-                            st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
-            
+                # 네트워크 분석
+                progress_text.text("네트워크 분석 중...")
+                progress_bar.progress(75)
+                
+                # 네트워크 분석기 생성
+                network_analyzer = NetworkAnalyzer(network_data)
+                
+                # 세션 상태에 저장
+                st.session_state.network_analyzer = network_analyzer
+                st.session_state.network_data = network_data
+                
+                # 완료 표시
+                progress_text.text("분석 완료!")
+                progress_bar.progress(100)
+                time.sleep(0.5)
+                
+                # 분석 결과 페이지로 전환
+                st.session_state.page = 'analysis'
+                st.rerun()
             except Exception as e:
-                st.error(f"파일 로드 중 오류가 발생했습니다: {str(e)}")
-    
-    # 사용 가이드
-    st.markdown("""
-    ## 간단 사용 가이드
-    
-    1. **데이터 입력**: 구글 시트 링크를 입력하거나 파일 업로드 또는 예시 데이터 선택
-    2. **분석 시작**: 버튼을 클릭하여 네트워크 분석 실행
-    3. **결과 확인**: 생성된 네트워크 그래프와 분석 결과 확인
-    """)
+                import traceback
+                logger.error(f"분석 시작 중 오류: {str(e)}")
+                logger.error(traceback.format_exc())
+                st.error(f"데이터 분석 중 오류가 발생했습니다: {str(e)}")
+                progress_bar.empty()
+                progress_text.empty()
 
 def check_and_create_assets():
     """필요한 디렉토리와 자산 파일들을 확인하고 생성합니다"""
