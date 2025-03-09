@@ -661,15 +661,50 @@ def main():
 
 # 분석 결과 표시 함수
 def show_analysis_results():
-    """분석 결과 표시 페이지"""
+    """분석 결과 페이지 표시"""
     try:
         st.title(f"학급 관계망 분석 결과 v{APP_VERSION}")
         
-        # 학생 관계 시각화 및 분석 결과를 보여줍니다
         st.markdown("""
         학급 내 학생들 간의 관계를 다양한 방식으로 시각화하고 분석한 결과입니다.
         아래 탭에서 각 분석 결과를 확인할 수 있습니다.
         """)
+        
+        # 결과가 있는지 안전하게 확인
+        network_analyzer = st.session_state.get('network_analyzer')
+        if not network_analyzer:
+            st.error("분석 결과가 없습니다. 먼저 데이터를 업로드하고 분석을 실행해주세요.")
+            # 버튼 클릭 처리 방식 변경
+            if st.button("데이터 업로드 화면으로 돌아가기", key="go_to_upload"):
+                st.session_state.page = 'upload'
+                st.rerun()
+            return
+        
+        # 네트워크 데이터 가져오기
+        network_data = st.session_state.get('network_data', {})
+        analyzer = network_analyzer
+        
+        # 시각화 객체 생성 또는 가져오기
+        if 'visualizer' not in st.session_state or not st.session_state.visualizer:
+            try:
+                from src.visualizer import NetworkVisualizer
+                # 시각화 객체 생성
+                visualizer = NetworkVisualizer(analyzer=analyzer)
+                st.session_state.visualizer = visualizer
+            except Exception as e:
+                logger.error(f"시각화 객체 생성 중 오류: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # 오류 발생 시 기본 시각화 객체 없이 진행 시도
+                visualizer = None
+        else:
+            visualizer = st.session_state.visualizer
+        
+        # 보고서 생성기 초기화 - 사이드바 전에 정의
+        if 'report_generator' not in st.session_state:
+            from src.report_generator import ReportGenerator
+            st.session_state.report_generator = ReportGenerator(analyzer, visualizer)
+        report_generator = st.session_state.report_generator
         
         # 사이드바에 컨트롤 추가
         with st.sidebar:
@@ -713,51 +748,6 @@ def show_analysis_results():
             st.markdown("---")
             st.markdown("<div style='text-align: center; color: #888;'>Made by TechKwon</div>", unsafe_allow_html=True)
         
-        # 결과가 있는지 안전하게 확인
-        network_analyzer = st.session_state.get('network_analyzer')
-        if not network_analyzer:
-            st.error("분석 결과가 없습니다. 먼저 데이터를 업로드하고 분석을 실행해주세요.")
-            # 버튼 클릭 처리 방식 변경
-            if st.button("데이터 업로드 화면으로 돌아가기", key="go_to_upload"):
-                # 세션 상태 안전하게 초기화
-                for key in list(st.session_state.keys()):
-                    if key not in ['page', 'go_to_upload']:
-                        del st.session_state[key]
-                # 페이지 상태 변경
-                st.session_state.page = 'upload'
-                st.rerun()
-            return
-
-        # 분석기 가져오기
-        analyzer = network_analyzer
-        
-        # 네트워크 데이터 가져오기
-        network_data = st.session_state.get('network_data')
-        if not network_data:
-            st.error("네트워크 데이터가 없습니다.")
-            return
-
-        # 시각화 객체 생성 또는 가져오기
-        if 'visualizer' not in st.session_state or not st.session_state.visualizer:
-            try:
-                from src.visualizer import NetworkVisualizer
-                # 시각화 객체 생성
-                visualizer = NetworkVisualizer(analyzer=analyzer)
-                st.session_state.visualizer = visualizer
-            except Exception as e:
-                logger.error(f"시각화 객체 생성 중 오류: {str(e)}")
-                import traceback
-                logger.error(traceback.format_exc())
-                # 오류 발생 시 기본 시각화 객체 없이 진행 시도
-                visualizer = None
-        else:
-            visualizer = st.session_state.visualizer
-
-        # 보고서 생성기 초기화
-        if 'report_generator' not in st.session_state:
-            st.session_state.report_generator = ReportGenerator(analyzer, visualizer)
-        report_generator = st.session_state.report_generator
-
         # 상단 메뉴 탭
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📊 학생 분석", 
