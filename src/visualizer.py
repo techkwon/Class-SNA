@@ -720,6 +720,7 @@ class NetworkVisualizer:
             node_y = []
             node_text = []
             node_hover = []
+            node_ids = []  # node_ids 변수 초기화 추가
             node_labels = {}
             for node in G.nodes():
                 # 노드 ID가 이미 실제 이름인 경우 (G_original 사용 시)
@@ -802,7 +803,8 @@ class NetworkVisualizer:
                     node_y.append(0)
                     node_text.append(str(node))
                     node_hover.append(f"오류: {str(e)}")
-                    node_labels.append(str(node))
+                    # 딕셔너리에 추가하도록 수정
+                    node_labels[node] = str(node)
                     node_ids.append(str(node))
             
             # 노드 트레이스
