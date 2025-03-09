@@ -1044,10 +1044,21 @@ class NetworkVisualizer:
                 
                 # 유니크한 커뮤니티 값 추출
                 unique_communities = set(community_values)
-                colors = plt.cm.tab20(np.linspace(0, 1, len(unique_communities)))
                 
-                community_colors = {comm: f"rgba({int(r*255)},{int(g*255)},{int(b*255)},{a})" 
-                                    for comm, (r, g, b, a) in zip(unique_communities, colors)}
+                # 더 선명하고 다양한 색상 팔레트 사용
+                colors = [
+                    "#E57373", "#F06292", "#BA68C8", "#9575CD", 
+                    "#7986CB", "#64B5F6", "#4FC3F7", "#4DD0E1", 
+                    "#4DB6AC", "#81C784", "#AED581", "#DCE775", 
+                    "#FFF176", "#FFD54F", "#FFB74D", "#FF8A65"
+                ]
+                
+                # 커뮤니티 수가 색상 팔레트보다 많을 경우 반복해서 사용
+                if len(unique_communities) > len(colors):
+                    colors = colors * (len(unique_communities) // len(colors) + 1)
+                
+                community_colors = {comm: colors[i % len(colors)] 
+                                for i, comm in enumerate(unique_communities)}
                 
                 for node, comm in community_data.items():
                     if node in G.nodes():
@@ -1062,17 +1073,134 @@ class NetworkVisualizer:
             # 한글 폰트 적용
             net = apply_korean_font_to_pyvis(net)
             
+            # 노드 추가 및 설정
+            for node in G.nodes():
+                try:
+                    # 노드 레이블 설정 (가능하면 한글 이름 사용)
+                    if 'label' in G.nodes[node]:
+                        label = G.nodes[node]['label']
+                    else:
+                        label = str(node)
+                    
+                    # 노드 크기 설정 (중심성 기반)
+                    size = 15  # 기본 크기
+                    if node in node_sizes:
+                        size = node_sizes[node]
+                    
+                    # 노드 색상 설정 (커뮤니티 우선, 없으면 중심성 기반)
+                    if node in color_map:
+                        color = color_map[node]  # 커뮤니티 기반 색상
+                    else:
+                        # 중심성 기반 색상 (파란색 계열, 진한 정도로 중요도 표현)
+                        color_intensity = node_colors.get(node, 0.5)
+                        r = int(25 + 130 * (1 - color_intensity))  # 더 낮은 값 = 더 진한 파란색
+                        g = int(100 + 155 * (1 - color_intensity))
+                        b = 255
+                        color = f"rgb({r},{g},{b})"
+                    
+                    # 향상된 툴팁 정보
+                    title = f"<div style='font-size:14px; padding:5px;'>"
+                    title += f"<b>학생:</b> {label}<br>"
+                    
+                    # 중심성 지표가 있으면 추가
+                    has_centrality = False
+                    
+                    # 인기도 (받은 선택 수)
+                    in_deg = G.in_degree(node)
+                    title += f"<b>받은 선택 수:</b> {in_deg}명<br>"
+                    
+                    # 활동성 (선택한 학생 수)
+                    out_deg = G.out_degree(node)
+                    title += f"<b>선택한 학생 수:</b> {out_deg}명<br>"
+                    
+                    # 매개 중심성
+                    if hasattr(self, 'metrics') and 'betweenness' in self.metrics and node in self.metrics['betweenness']:
+                        betw = self.metrics['betweenness'][node]
+                        title += f"<b>매개 중심성:</b> {betw:.3f}<br>"
+                        has_centrality = True
+                    
+                    # 커뮤니티 정보
+                    if community_data and node in community_data:
+                        comm = community_data[node]
+                        comm_val = comm[0] if isinstance(comm, list) and comm else comm
+                        title += f"<b>소속 그룹:</b> {comm_val}<br>"
+                    
+                    # 중심성 설명 추가
+                    if has_centrality:
+                        if in_deg > 3:
+                            title += "<br><i>많은 학생들에게 선택받은 인기 학생입니다.</i>"
+                        elif in_deg == 0:
+                            title += "<br><i>다른 학생들에게 선택받지 못했습니다.</i>"
+                            
+                        if betw > 0.2:
+                            title += "<br><i>학급 내 다양한 그룹을 연결하는 중요한 역할을 합니다.</i>"
+                    
+                    title += "</div>"
+                    
+                    # 노드 추가
+                    net.add_node(node, label=label, size=size, color=color, title=title)
+                    
+                except Exception as e:
+                    logger.warning(f"노드 {node} 추가 중 오류: {str(e)}")
+            
+            # 엣지 추가 및 설정
+            for u, v, data in G.edges(data=True):
+                try:
+                    # 엣지 두께 설정 (가중치 기반)
+                    weight = data.get('weight', 1)
+                    width = 1 + min(weight * 2, 10)  # 두께 제한
+                    
+                    # 엣지 정보
+                    u_label = G.nodes[u].get('label', str(u))
+                    v_label = G.nodes[v].get('label', str(v))
+                    
+                    # 질문 유형에 따른 색상 설정
+                    edge_type = data.get('type', '')
+                    
+                    # 향상된 엣지 툴팁
+                    title = f"<div style='font-size:13px;'>"
+                    title += f"<b>{u_label}</b>님이 <b>{v_label}</b>님을 선택함"
+                    
+                    if edge_type:
+                        title += f"<br><i>관계 유형:</i> {edge_type}"
+                        
+                    title += f"<br><i>관계 강도:</i> {weight:.1f}"
+                    title += "</div>"
+                    
+                    # 엣지 색상 설정
+                    # 관계 유형에 따른 색상 지정
+                    if "공부" in edge_type or "과제" in edge_type:
+                        edge_color = "#4CAF50"  # 녹색 (학업 관련)
+                    elif "쉬는" in edge_type or "밖에서" in edge_type:
+                        edge_color = "#FF9800"  # 주황색 (친목 관련)
+                    elif "프로젝트" in edge_type or "조별" in edge_type:
+                        edge_color = "#2196F3"  # 파란색 (협업 관련)
+                    elif "행사" in edge_type or "이벤트" in edge_type:
+                        edge_color = "#9C27B0"  # 보라색 (단체활동 관련)
+                    else:
+                        edge_color = "#757575"  # 회색 (기본)
+                    
+                    # 화살표 크기 조정 (더 명확하게)
+                    arrow = {'size': min(2 + weight, 8)}
+                    
+                    # 엣지 추가
+                    net.add_edge(u, v, title=title, width=width, color=edge_color, arrows=arrow)
+                    
+                except Exception as e:
+                    logger.warning(f"엣지 {u}->{v} 추가 중 오류: {str(e)}")
+            
             # 네트워크 옵션 설정
-            # 이전 set_options 호출 대신 옵션을 직접 설정합니다
             net.options = {
                 "nodes": {
                     "font": {
                         "size": 16,
-                        "face": "Noto Sans KR"
+                        "face": "Noto Sans KR",
+                        "color": "#000000"  # 검은색으로 통일 (가독성 향상)
                     },
                     "shape": "dot",
                     "borderWidth": 2,
-                    "borderWidthSelected": 4
+                    "borderWidthSelected": 4,
+                    "shadow": True  # 그림자 효과 추가
                 },
                 "edges": {
                     "color": {
@@ -1087,16 +1215,26 @@ class NetworkVisualizer:
                             "enabled": True,
                             "scaleFactor": 0.5
                         }
-                    }
+                    },
+                    "shadow": True  # 그림자 효과 추가
                 },
                 "physics": {
                     "enabled": True,
                     "solver": layout,
+                    "stabilization": {
+                        "enabled": True,
+                        "iterations": 1000,
+                        "updateInterval": 25
+                    }
                 },
                 "interaction": {
                     "hover": True,
                     "navigationButtons": True,
-                    "multiselect": True
+                    "multiselect": True,
+                    "tooltipDelay": 100,  # 툴팁 지연 시간 감소
+                    "hideEdgesOnDrag": False,  # 드래그 시 엣지 유지
+                    "selectable": True,
+                    "hoverConnectedEdges": True
                 },
                 "configure": {
                     "enabled": True,
@@ -1109,8 +1247,8 @@ class NetworkVisualizer:
                 net.options["physics"]["barnesHut"] = {
                     "gravitationalConstant": -2000,
                     "centralGravity": 0.1,
-                    "springLength": 95,
-                    "springConstant": 0.04,
+                    "springLength": 150,  # 더 많은 공간
+                    "springConstant": 0.05,
                     "damping": 0.09
                 }
             elif layout == "force":
@@ -1120,150 +1258,6 @@ class NetworkVisualizer:
                     "springLength": 100,
                     "springConstant": 0.08
                 }
-            
-            # 정점 레이블 매핑 (원래 한글 이름으로 표시)
-            node_labels = {}
-            for node in G.nodes():
-                # 노드 ID가 이미 실제 이름인 경우 (G_original 사용 시)
-                node_labels[node] = str(node)
-                
-                # 추가적인 레이블 검색 (노드 속성 사용)
-                if 'label' in G.nodes[node] and G.nodes[node]['label']:
-                    node_labels[node] = G.nodes[node]['label']
-                elif 'name' in G.nodes[node] and G.nodes[node]['name']:
-                    node_labels[node] = G.nodes[node]['name']
-
-            # 노드 추가
-            for node in G.nodes():
-                # 노드 레이블 (실제 학생 이름)
-                node_label = node_labels.get(node, str(node))
-                
-                # 노드 크기 및 색상
-                size = node_sizes.get(node, 15)
-                
-                # 색상 설정 (커뮤니티 기반 또는 기본값)
-                if node in color_map:
-                    color = color_map[node]
-                else:
-                    # 매개 중심성 기반 색상
-                    color_intensity = node_colors.get(node, 0.5)
-                    color = f"rgba(75, 192, 192, {color_intensity})"
-                
-                # 중심성 지표 가져오기
-                in_degree_val = in_degree.get(node, 0)
-                out_degree_val = G.out_degree(node)
-                betweenness_val = bet_cent.get(node, 0)
-                
-                # 소수점 둘째자리로 반올림
-                in_degree_val = round(in_degree_val, 2)
-                out_degree_val = round(out_degree_val, 2)
-                betweenness_val = round(betweenness_val, 2)
-                
-                # 네트워크에 화살표가 향하는 수 (인기도)
-                in_arrows = len([u for u, v in G.edges() if v == node])
-                
-                # 네트워크에서 나가는 화살표 수 (활동성)
-                out_arrows = len([u for u, v in G.edges() if u == node])
-                
-                # 툴팁 텍스트 (HTML 태그 제거, 일반 텍스트로 변환)
-                tooltip_text = f"{node_label}\n인기도(In): {in_degree_val}\n활동성(Out): {out_degree_val}\n매개성: {betweenness_val}\n받은 선택: {in_arrows}개\n한 선택: {out_arrows}개"
-                
-                # 정점 추가
-                net.add_node(
-                    node, 
-                    label=node_label,
-                    title=tooltip_text,
-                    size=size, 
-                    color=color
-                )
-            
-            # 엣지 추가
-            for u, v, data in G.edges(data=True):
-                # 가중치 (기본값 1)
-                weight = data.get('weight', 1)
-                
-                # 노드 레이블 가져오기 (실제 학생 이름)
-                u_label = node_labels.get(u, str(u))
-                v_label = node_labels.get(v, str(v))
-                
-                # 엣지 설명 
-                title = f"{u_label} → {v_label}"
-                if weight > 1:
-                    title += f" (가중치: {weight})"
-                
-                # 엣지 색상 및 폭 설정
-                edge_color = "#848484"  # 기본 회색
-                width = 1 + weight * 0.5  # 가중치에 비례
-                
-                # 엣지 추가
-                net.add_edge(u, v, title=title, width=width, color=edge_color)
-            
-            # 툴팁이 HTML 태그를 그대로 보여주는 문제 해결
-            # 자바스크립트를 이용해 툴팁 텍스트를 적절히 포맷팅
-            net.html = net.html.replace('</head>', '''
-            <style>
-            div.vis-tooltip {
-                position: absolute;
-                visibility: hidden;
-                padding: 10px;
-                white-space: pre-wrap;
-                font-family: 'Noto Sans KR', sans-serif;
-                font-size: 14px;
-                color: #000000;
-                background-color: #f5f5f5;
-                border-radius: 4px;
-                border: 1px solid #d3d3d3;
-                box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
-                pointer-events: none;
-                z-index: 5;
-            }
-            </style>
-            <script>
-            // 커스텀 툴팁 기능
-            document.addEventListener("DOMContentLoaded", function() {
-                setTimeout(function() {
-                    try {
-                        // 노드 호버 이벤트에 연결
-                        network.on("hoverNode", function(params) {
-                            // 노드의 title 속성 가져오기
-                            var node = network.body.nodes[params.node];
-                            if (node && node.options.title) {
-                                var content = node.options.title;
-                                // 줄바꿈을 <br>로 변환
-                                content = content.replace(/\\n/g, '<br>');
-                                // 툴팁 요소 스타일 지정
-                                var tooltip = document.querySelector('.vis-tooltip');
-                                if (tooltip) {
-                                    tooltip.innerHTML = content;
-                                    tooltip.style.visibility = 'visible';
-                                }
-                            }
-                        });
-                        
-                        // 호버 상태 벗어날 때 툴팁 숨기기
-                        network.on("blurNode", function() {
-                            var tooltip = document.querySelector('.vis-tooltip');
-                            if (tooltip) {
-                                tooltip.style.visibility = 'hidden';
-                            }
-                        });
-                        
-                        // 마우스 움직임에 따라 툴팁 위치 조정
-                        document.addEventListener('mousemove', function(e) {
-                            var tooltip = document.querySelector('.vis-tooltip');
-                            if (tooltip && tooltip.style.visibility === 'visible') {
-                                tooltip.style.top = (e.pageY + 15) + 'px';
-                                tooltip.style.left = (e.pageX + 15) + 'px';
-                            }
-                        });
-                    } catch (err) {
-                        console.error("툴팁 설정 중 오류 발생:", err);
-                    }
-                }, 500); // 네트워크가 로드될 시간을 주기 위한 지연
-            });
-            </script>
-            </head>
-            ''')
             
             return net
         except Exception as e:

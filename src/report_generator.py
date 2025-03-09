@@ -1329,8 +1329,8 @@ class ReportGenerator:
                 
                 # 완전 고립 학생
                 for student in isolated:
-                    # 학생 실명 표시
-                    student_name = str(student)
+                    # 학생 실명 표시 개선
+                    student_name = self._get_student_real_name(student)
                     isolation_data.append({
                         "학생명": student_name,
                         "상태": "완전 고립",
@@ -1341,8 +1341,8 @@ class ReportGenerator:
                 
                 # 외곽 학생 (선택받지 못함)
                 for student in peripheral:
-                    # 학생 실명 표시
-                    student_name = str(student)
+                    # 학생 실명 표시 개선
+                    student_name = self._get_student_real_name(student)
                     # 나가는 엣지 수
                     out_count = self.graph.out_degree(student)
                     
@@ -1464,3 +1464,45 @@ class ReportGenerator:
             logger.error(f"네트워크 시각화 오류: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
+    
+    # 실제 학생 이름을 가져오는 새로운 헬퍼 함수 추가
+    def _get_student_real_name(self, student_id):
+        """학생 ID를 실제 이름으로 변환
+        
+        Arguments:
+            student_id: 학생 ID (로마자 또는 숫자)
+            
+        Returns:
+            str: 실제 학생 이름, 변환 실패 시 원래 ID를 문자열로 반환
+        """
+        # analyzer가 있는지 확인
+        if not hasattr(self, 'analyzer') or not self.analyzer:
+            return str(student_id)
+        
+        # 1. name_mapping 확인 (ID -> 이름)
+        if hasattr(self.analyzer, 'name_mapping') and self.analyzer.name_mapping:
+            if student_id in self.analyzer.name_mapping:
+                return self.analyzer.name_mapping[student_id]
+                
+        # 2. reverse_romanized 확인 (로마자 -> 한글)
+        if hasattr(self.analyzer, 'reverse_romanized') and self.analyzer.reverse_romanized:
+            if student_id in self.analyzer.reverse_romanized:
+                return self.analyzer.reverse_romanized[student_id]
+                
+        # 3. id_to_name 확인
+        if hasattr(self.analyzer, 'id_to_name') and hasattr(self.analyzer.id_to_name, 'get'):
+            name = self.analyzer.id_to_name.get(student_id)
+            if name:
+                return name
+        
+        # 4. visualizer의 _get_original_name 메서드 사용 시도
+        if hasattr(self, 'visualizer') and hasattr(self.visualizer, '_get_original_name'):
+            try:
+                name = self.visualizer._get_original_name(student_id)
+                if name:
+                    return name
+            except:
+                pass
+        
+        # 변환 실패 시 원래 ID 반환
+        return str(student_id)

@@ -143,6 +143,9 @@ class NetworkAnalyzer:
             
             logger.info(f"그래프 생성 완료: 노드 {G.number_of_nodes()}개, 엣지 {G.number_of_edges()}개")
             
+            # 그래프 생성 후 즉시 중심성 계산 자동 실행
+            self.calculate_centrality()
+            
         except Exception as e:
             logger.error(f"그래프 생성 실패: {str(e)}")
             raise Exception(f"네트워크 그래프 생성 중 오류가 발생했습니다: {str(e)}")
