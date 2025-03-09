@@ -1029,7 +1029,19 @@ class NetworkVisualizer:
             # 색상 매핑
             color_map = {}
             if community_data:
-                unique_communities = set(community_data.values())
+                # 커뮤니티 값이 리스트인 경우 처리
+                community_values = []
+                for node, comm in community_data.items():
+                    if isinstance(comm, list):
+                        # 리스트인 경우 첫 번째 값만 사용
+                        if comm:  # 비어있지 않은 리스트 확인
+                            community_values.append(comm[0])
+                    else:
+                        # 일반 값(정수, 문자열 등)인 경우 그대로 추가
+                        community_values.append(comm)
+                
+                # 유니크한 커뮤니티 값 추출
+                unique_communities = set(community_values)
                 colors = plt.cm.tab20(np.linspace(0, 1, len(unique_communities)))
                 
                 community_colors = {comm: f"rgba({int(r*255)},{int(g*255)},{int(b*255)},{a})" 
@@ -1037,7 +1049,10 @@ class NetworkVisualizer:
                 
                 for node, comm in community_data.items():
                     if node in G.nodes():
-                        color_map[node] = community_colors[comm]
+                        # 리스트인 경우 첫 번째 커뮤니티 사용
+                        comm_value = comm[0] if isinstance(comm, list) and comm else comm
+                        if comm_value in community_colors:
+                            color_map[node] = community_colors[comm_value]
             
             # PyVis 네트워크 초기화
             net = Network(height=height, width=width, directed=True, notebook=False)

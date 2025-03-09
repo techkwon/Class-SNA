@@ -480,7 +480,7 @@ def main():
         # 푸터
         st.markdown("""
         <div style="text-align: center; margin-top: 40px; color: #888;">
-            <p>© 2023 학급 관계 네트워크 분석 시스템 | 소셜 네트워크 분석 도구</p>
+            <p>© 2025 학급 관계 네트워크 분석 시스템 | 소셜 네트워크 분석 도구</p>
         </div>
         """, unsafe_allow_html=True)
     
