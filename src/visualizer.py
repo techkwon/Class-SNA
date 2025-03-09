@@ -359,7 +359,7 @@ class NetworkVisualizer:
                 try:
                     original_G.add_edge(u, v, **data)
                 except Exception as e:
-                    logger.warning(f"엣지 {u}->{v} 추가 중 오류: {str(e)}")
+                    logger.warning(f"엣지 {u}-{v} 추가 중 오류: {str(e)}")
                     # 오류 발생 시 기본값으로 추가
                     original_G.add_edge(u, v)
             
@@ -567,10 +567,10 @@ class NetworkVisualizer:
             
             # 커뮤니티 정보 가져오기
             communities = None
-            if hasattr(self.analyzer, 'communities') and self.analyzer.communities:
+            if hasattr(self, 'communities') and self.communities:
+                communities = self.communities
+            elif hasattr(self.analyzer, 'communities'):
                 communities = self.analyzer.communities
-            elif hasattr(self.analyzer, 'get_communities'):
-                communities = self.analyzer.get_communities()
             
             # 노드 색상 설정 (커뮤니티 기반)
             node_color = []
@@ -778,9 +778,12 @@ class NetworkVisualizer:
                     
                     # 커뮤니티 정보 추가
                     if communities and node in communities:
-                        comm = community_data[node]
-                        hover_text += f"<br>그룹: {comm}"
-                        
+                        try:
+                            comm = communities[node]
+                            hover_text += f"<br>그룹: {comm}"
+                        except (KeyError, NameError):
+                            pass  # community_data 정의되지 않은 경우 건너뛰기
+                    
                     # 중심 노드 표시
                     if focus_node is not None and node == focus_node:
                         hover_text += "<br><b>중심 노드</b>"
@@ -998,184 +1001,130 @@ class NetworkVisualizer:
                 "stabilization": {
                   "enabled": true,
                   "iterations": 1000,
-                  "updateInterval": 50
+                  "updateInterval": 100,
+                  "fit": true
                 },
-                "solver": "forceAtlas2Based",
-                "forceAtlas2Based": {
-                  "gravitationalConstant": -500,
-                  "springLength": 100,
-                  "springConstant": 0.01,
-                  "damping": 0.4,
-                  "avoidOverlap": 0.5
+                "barnesHut": {
+                  "gravitationalConstant": -3000,
+                  "centralGravity": 0.3,
+                  "springLength": 120,
+                  "springConstant": 0.02,
+                  "damping": 0.09
                 }
               }
             }
             """)
             
-            # 노드 및 엣지 정보 설정
-            if not hasattr(self, 'G_viz') or not self.G_viz:
-                self._create_original_name_graph(self.G)
-            
-            # G_viz가 여전히 None인 경우 기본 그래프 사용
-            if not self.G_viz:
-                logger.warning("G_viz가 없어 기본 그래프를 사용합니다.")
-                G_viz = self.G
-            else:
-                G_viz = self.G_viz
-            
-            # 커뮤니티 데이터가 있으면 색상 매핑 생성
+            # 커뮤니티 정보 가져오기
+            communities = None
             if hasattr(self, 'communities') and self.communities:
-                # 8가지 기본 색상
-                colors = ['#E41A1C', '#377EB8', '#4DAF4A', '#984EA3', 
-                         '#FF7F00', '#FFFF33', '#A65628', '#F781BF']
-                
-                # 커뮤니티 수에 따라 색상 매핑 생성
-                unique_communities = set()
-                for node, community in self.communities.items():
-                    # 리스트인 경우 첫 번째 값만 사용
-                    if isinstance(community, list):
-                        if community:  # 비어있지 않은 경우만
-                            unique_communities.add(community[0])
-                    else:
-                        unique_communities.add(community)
-                
-                community_list = sorted(list(unique_communities))
-                color_map = {comm: colors[i % len(colors)] for i, comm in enumerate(community_list)}
-            else:
-                color_map = {}
+                communities = self.communities
+            elif hasattr(self.analyzer, 'communities') and self.analyzer.communities:
+                communities = self.analyzer.communities
             
-            # 노드 크기 계산 (betweenness centrality 기반)
+            # 그래프 데이터 가져오기
+            G = self.G
+            
+            # 노드 중심성 지표 가져오기
+            node_colors = {}
             node_sizes = {}
-            if hasattr(self, 'metrics') and 'betweenness' in self.metrics:
-                betweenness = self.metrics['betweenness']
+            
+            if hasattr(self, 'metrics'):
+                metrics = self.metrics
                 
-                # normalize 함수 정의
-                def normalize(values, min_size=15, max_size=35):
-                    if not values:
-                        return {}
-                    
-                    min_val = min(values.values())
-                    max_val = max(values.values())
-                    
-                    if min_val == max_val:  # 모든 값이 같을 경우
-                        return {k: (min_size + max_size) // 2 for k in values}
-                    
-                    normalized = {}
-                    for k, v in values.items():
-                        # 최소-최대 정규화
-                        normalized_value = (v - min_val) / (max_val - min_val)
-                        # 크기 범위에 맞게 조정
-                        normalized[k] = min_size + normalized_value * (max_size - min_size)
-                    
-                    return normalized
+                # 크기 결정: 인기도(in_degree)
+                if 'in_degree' in metrics:
+                    node_sizes = metrics['in_degree']
                 
-                # 노드 크기 정규화
-                node_sizes = normalize(betweenness)
-                
-                # 노드 색상 계산 (그라데이션 효과, 커뮤니티가 없을 때만 사용)
-                if not color_map:
-                    node_colors = normalize(betweenness, 0.2, 0.9)  # 밝기값 범위
+                # 색상 결정: 매개 중심성(betweenness)
+                if 'betweenness' in metrics:
+                    node_colors = metrics['betweenness']
             
             # 노드 추가
-            for node in G_viz.nodes():
+            for node in G.nodes():
                 # 노드 속성 가져오기
-                node_attr = G_viz.nodes[node]
+                node_attr = G.nodes[node]
                 
-                # 노드 크기 (중심성 기반)
-                size = node_sizes.get(node, 15)  # 기본 크기 15
+                # 기본 크기 및 색상 설정
+                size = 15
+                color = "#97C2FC"
                 
-                # 노드 색상 (커뮤니티 또는 중심성 기반)
-                if hasattr(self, 'communities') and self.communities and node in self.communities:
-                    community = self.communities[node]
-                    # 리스트인 경우 첫 번째 커뮤니티만 사용
-                    if isinstance(community, list):
-                        community = community[0] if community else None
-                    
-                    # 커뮤니티에 해당하는 색상 가져오기
-                    color = color_map.get(community, '#7DCEA0')  # 기본 색상
+                # 노드 크기 계산 (인기도 기반)
+                if node in node_sizes:
+                    # 노드 크기 정규화 (15-30)
+                    size = node_sizes.get(node, 0.5)
+                    size = 15 + min(15, size * 30)
+                
+                # 노드 색상 계산
+                if communities and node in communities:
+                    # 커뮤니티 색상 맵 (최대 10개 커뮤니티)
+                    color_map = ["#3366CC", "#DC3912", "#FF9900", "#109618", "#990099", "#0099C6", "#DD4477", "#66AA00", "#B82E2E", "#316395"]
+                    try:
+                        comm = communities[node]
+                        if isinstance(comm, (int, float)) and 0 <= comm < len(color_map):
+                            color = color_map[int(comm)]
+                        else:
+                            # 기본값으로 매개 중심성 기반 색상 사용
+                            intensity = node_colors.get(node, 0.5)
+                            color = f"rgba(25, 118, 210, {min(0.9, max(0.3, intensity))})"
+                    except Exception as e:
+                        logger.warning(f"노드 {node} 색상 설정 중 오류: {str(e)}")
+                        # 기본 색상 사용
+                        color = "#97C2FC"
                 else:
-                    # 중심성 기반 색상
-                    brightness = node_colors.get(node, 0.5) if 'node_colors' in locals() else 0.5
-                    color = f"hsla(120, 100%, {int(brightness * 100)}%, 0.8)"
+                    # 매개 중심성 기반 색상 설정
+                    intensity = node_colors.get(node, 0.5)
+                    color = f"rgba(25, 118, 210, {min(0.9, max(0.3, intensity))})"
                 
-                # 노드 제목 (툴팁에 표시될 정보)
-                tooltip = node_attr.get('tooltip', '')
-                if 'label' in node_attr:
-                    title = f"학생: {node_attr['label']}<br>"
-                else:
-                    title = f"학생: {node}<br>"
-                
-                if hasattr(self, 'metrics'):
-                    # 중심성 지표가 있으면 툴팁에 추가
-                    if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
-                        in_deg = self.metrics['in_degree'][node]
-                        if isinstance(in_deg, list):
-                            in_deg = in_deg[0] if in_deg else 0
-                        title += f"받은 선택 수: {in_deg:.0f}명<br>"
+                # 툴팁 정보 설정 (호버 시 표시)
+                try:
+                    # 노드 기본 정보
+                    title = f"<b>{node_attr.get('label', node)}</b><br>"
                     
-                    if 'out_degree' in self.metrics and node in self.metrics['out_degree']:
-                        out_deg = self.metrics['out_degree'][node]
-                        if isinstance(out_deg, list):
-                            out_deg = out_deg[0] if out_deg else 0
-                        title += f"선택한 학생 수: {out_deg:.0f}명<br>"
+                    # 중심성 지표 추가
+                    in_deg = 0
+                    out_deg = 0
+                    bet = 0
                     
-                    if 'betweenness' in self.metrics and node in self.metrics['betweenness']:
-                        bet = self.metrics['betweenness'][node]
-                        if isinstance(bet, list):
-                            bet = bet[0] if bet else 0
-                        title += f"매개 중심성: {bet:.3f}<br>"
-                
-                # 커뮤니티 정보 추가
-                if hasattr(self, 'communities') and self.communities and node in self.communities:
-                    community = self.communities[node]
-                    # 리스트인 경우 첫 번째 커뮤니티만 표시
-                    if isinstance(community, list):
-                        community = community[0] if community else None
-                    title += f"소속 그룹: {community}<br>"
-                
-                # 중심성에 따른 설명 추가
-                if hasattr(self, 'metrics') and 'in_degree' in self.metrics and node in self.metrics['in_degree']:
-                    in_deg = self.metrics['in_degree'][node]
-                    if isinstance(in_deg, list):
-                        in_deg = in_deg[0] if in_deg else 0
+                    if hasattr(self, 'metrics'):
+                        if 'in_degree' in self.metrics and node in self.metrics['in_degree']:
+                            in_deg = self.metrics['in_degree'][node]
+                        if 'out_degree' in self.metrics and node in self.metrics['out_degree']:
+                            out_deg = self.metrics['out_degree'][node]
+                        if 'betweenness' in self.metrics and node in self.metrics['betweenness']:
+                            bet = self.metrics['betweenness'][node]
                     
-                    if in_deg > (sum(self.metrics['in_degree'].values()) / len(self.metrics['in_degree'])):
-                        title += "\n많은 학생들에게 선택받은 인기 학생입니다."
-                
-                if tooltip:
-                    title += f"<br>{tooltip}"
-                
-                # 노드 추가
-                net.add_node(
-                    node, 
-                    label=node_attr.get('label', node), 
-                    title=title,
-                    color=color, 
-                    size=size
-                )
-            
-            # 엣지 추가
-            for source, target, edge_attr in G_viz.edges(data=True):
-                width = edge_attr.get('weight', 1)
-                
-                # Edge 레이블과 툴팁
-                label = edge_attr.get('label', '')
-                title = edge_attr.get('title', '')
-                
-                if 'relationship' in edge_attr:
-                    if title:
-                        title += f"<br>관계: {edge_attr['relationship']}"
-                    else:
-                        title = f"관계: {edge_attr['relationship']}"
-                
-                # 엣지 추가
-                net.add_edge(
-                    source, 
-                    target, 
-                    width=width, 
-                    label=label,
-                    title=title
-                )
+                    # 커뮤니티 정보 추가
+                    if communities and node in communities:
+                        try:
+                            comm = communities[node]
+                            title += f"소속 그룹: {comm}<br>"
+                        except Exception as e:
+                            logger.warning(f"노드 {node} 정보 설정 중 오류: {str(e)}")
+                    
+                    # 중심성 지표 표시
+                    title += f"인기도: {in_deg:.3f}<br>"
+                    title += f"활동성: {out_deg:.3f}<br>"
+                    title += f"매개성: {bet:.3f}<br>"
+                    
+                    # 연결 정보
+                    in_edges = G.in_degree(node)
+                    out_edges = G.out_degree(node)
+                    title += f"받은 선택: {in_edges}명<br>"
+                    title += f"한 선택: {out_edges}명"
+                    
+                    # 노드 추가
+                    net.add_node(
+                        node, 
+                        label=node_attr.get('label', node), 
+                        title=title,
+                        color=color, 
+                        size=size
+                    )
+                except Exception as e:
+                    logger.warning(f"노드 {node} 추가 중 오류: {str(e)}")
+                    # 기본 설정으로 노드 추가
+                    net.add_node(node, label=str(node))
             
             return net
         

@@ -855,9 +855,19 @@ class ReportGenerator:
                 community_id = "없음"
                 if self.communities is not None:
                     for comm_id, members in self.communities.items():
-                        if selected_student_id in members:
-                            community_id = comm_id
-                            break
+                        try:
+                            # members가 iterable인 경우
+                            if isinstance(members, (list, tuple, set, dict)):
+                                if selected_student_id in members:
+                                    community_id = comm_id
+                                    break
+                            # members가 단일 값인 경우
+                            elif selected_student_id == members:
+                                community_id = comm_id
+                                break
+                        except Exception as e:
+                            logger.warning(f"커뮤니티 멤버십 확인 중 오류: {str(e)}")
+                            continue
                 
                 # 데이터 테이블
                 metrics_data = {
