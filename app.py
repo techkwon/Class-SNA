@@ -218,18 +218,7 @@ def upload_page():
     # 사이드바
     with st.sidebar:
         st.markdown("### 데이터 입력")
-        st.markdown("구글 시트 공유 링크를 입력하세요.")
-        
-        # URL 입력 필드 - 고유 키 부여
-        sheet_url = st.text_input("구글 시트 공유 링크:", 
-                                value=st.session_state.get('sheet_url', ''),
-                                key="url_input")
-        
-        # URL 변경 시 세션 상태 업데이트
-        if sheet_url != st.session_state.get('sheet_url', ''):
-            st.session_state.sheet_url = sheet_url
-            # URL 변경 시 example_selected 초기화
-            st.session_state.example_selected = ""
+        st.markdown("업로드한 CSV 파일 또는 예시 데이터를 사용하여 분석합니다.")
         
         # 예시 데이터 섹션
         st.markdown("### 예시 데이터")
@@ -270,10 +259,11 @@ def upload_page():
                     st.error(f"예시 데이터 파일을 찾을 수 없습니다: {example_path}")
                     st.session_state.example_selected = ""
         
-        # 분석 버튼
+        # 분석 버튼 - 파일 업로드 또는 예시 데이터 선택 시에만 활성화
+        has_input = bool(st.session_state.get('sheet_url', '')) or st.session_state.get('uploaded_file', None) is not None
         analyzer_button = st.button(
             "분석 시작", 
-            disabled=not bool(st.session_state.get('sheet_url', '')),
+            disabled=not has_input,
             use_container_width=True,
             key="analyze_button"
         )

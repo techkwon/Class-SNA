@@ -784,8 +784,8 @@ class NetworkVisualizer:
                     
                     # 커뮤니티 정보 추가
                     if communities and node in communities:
-                        comm_id = communities[node]
-                        hover_text += f"<br>그룹: {comm_id}"
+                        comm = community_data[node]
+                        hover_text += f"<br>그룹: {comm}"
                         
                     # 중심 노드 표시
                     if focus_node is not None and node == focus_node:
@@ -1098,44 +1098,41 @@ class NetworkVisualizer:
                         b = 255
                         color = f"rgb({r},{g},{b})"
                     
-                    # 향상된 툴팁 정보
-                    title = f"<div style='font-size:14px; padding:5px;'>"
-                    title += f"<b>학생:</b> {label}<br>"
+                    # 향상된 툴팁 정보 (HTML 태그 제거, 일반 텍스트로)
+                    title = f"학생: {label}\n"
                     
                     # 중심성 지표가 있으면 추가
                     has_centrality = False
                     
                     # 인기도 (받은 선택 수)
                     in_deg = G.in_degree(node)
-                    title += f"<b>받은 선택 수:</b> {in_deg}명<br>"
+                    title += f"받은 선택 수: {in_deg}명\n"
                     
                     # 활동성 (선택한 학생 수)
                     out_deg = G.out_degree(node)
-                    title += f"<b>선택한 학생 수:</b> {out_deg}명<br>"
+                    title += f"선택한 학생 수: {out_deg}명\n"
                     
                     # 매개 중심성
                     if hasattr(self, 'metrics') and 'betweenness' in self.metrics and node in self.metrics['betweenness']:
                         betw = self.metrics['betweenness'][node]
-                        title += f"<b>매개 중심성:</b> {betw:.3f}<br>"
+                        title += f"매개 중심성: {betw:.3f}\n"
                         has_centrality = True
                     
                     # 커뮤니티 정보
                     if community_data and node in community_data:
                         comm = community_data[node]
                         comm_val = comm[0] if isinstance(comm, list) and comm else comm
-                        title += f"<b>소속 그룹:</b> {comm_val}<br>"
+                        title += f"소속 그룹: {comm_val}\n"
                     
                     # 중심성 설명 추가
                     if has_centrality:
                         if in_deg > 3:
-                            title += "<br><i>많은 학생들에게 선택받은 인기 학생입니다.</i>"
+                            title += "\n많은 학생들에게 선택받은 인기 학생입니다."
                         elif in_deg == 0:
-                            title += "<br><i>다른 학생들에게 선택받지 못했습니다.</i>"
+                            title += "\n다른 학생들에게 선택받지 못했습니다."
                             
                         if betw > 0.2:
-                            title += "<br><i>학급 내 다양한 그룹을 연결하는 중요한 역할을 합니다.</i>"
-                    
-                    title += "</div>"
+                            title += "\n학급 내 다양한 그룹을 연결하는 중요한 역할을 합니다."
                     
                     # 노드 추가
                     net.add_node(node, label=label, size=size, color=color, title=title)
@@ -1157,15 +1154,13 @@ class NetworkVisualizer:
                     # 질문 유형에 따른 색상 설정
                     edge_type = data.get('type', '')
                     
-                    # 향상된 엣지 툴팁
-                    title = f"<div style='font-size:13px;'>"
-                    title += f"<b>{u_label}</b>님이 <b>{v_label}</b>님을 선택함"
+                    # 향상된 엣지 툴팁 (HTML 태그 제거, 일반 텍스트로)
+                    title = f"{u_label}님이 {v_label}님을 선택함"
                     
                     if edge_type:
-                        title += f"<br><i>관계 유형:</i> {edge_type}"
+                        title += f"\n관계 유형: {edge_type}"
                         
-                    title += f"<br><i>관계 강도:</i> {weight:.1f}"
-                    title += "</div>"
+                    title += f"\n관계 강도: {weight:.1f}"
                     
                     # 엣지 색상 설정
                     # 관계 유형에 따른 색상 지정
@@ -1318,19 +1313,24 @@ class NetworkVisualizer:
             
             df = df.sort_values('value', ascending=False).head(top_n)
             
-            # 원본 이름과 영문 표시 이름 매핑
-            name_mapping = {}
-            for name in df['name']:
-                if re.search(r'[가-힣]', name):  # 한글이 포함된 경우만 변환
-                    name_mapping[name] = self._get_original_name(name)
+            # 실제 학생 이름으로 변환 (여러 매핑 방식 시도)
+            real_names = {}
+            for student_id in df['name']:
+                # 1. analyzer의 name_mapping 사용 (ID -> 이름)
+                if hasattr(self, 'analyzer') and hasattr(self.analyzer, 'name_mapping') and student_id in self.analyzer.name_mapping:
+                    real_names[student_id] = self.analyzer.name_mapping[student_id]
+                # 2. analyzer의 reverse_romanized 사용 (로마자 -> 한글)
+                elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'reverse_romanized') and student_id in self.analyzer.reverse_romanized:
+                    real_names[student_id] = self.analyzer.reverse_romanized[student_id]
+                # 3. 자체 original_names 매핑 사용
+                elif hasattr(self, 'original_names') and student_id in self.original_names:
+                    real_names[student_id] = self.original_names[student_id]
+                # 4. 변환 실패 시 원래 ID 그대로 사용
                 else:
-                    name_mapping[name] = name
-            
-            # 역방향 매핑 (로마자 -> 원본)
-            reverse_mapping = {v: k for k, v in name_mapping.items()}
+                    real_names[student_id] = student_id
             
             # 영문 이름으로 데이터프레임 변환
-            df['display_name'] = df['name'].map(name_mapping)
+            df['display_name'] = df['name'].map(real_names)
             
             # matplotlib 기본 폰트 설정 (영문 사용으로 한글 문제 우회)
             plt.rcParams['font.family'] = 'DejaVu Sans'
@@ -1353,17 +1353,18 @@ class NetworkVisualizer:
             ax.set_yticklabels(df['display_name'])
             
             # 그래프 스타일링 
-            ax.set_xlabel('Centrality Value', fontsize=12)
+            ax.set_xlabel('중심성 값', fontsize=12)
             
             # 중심성 지표별 적절한 제목 설정
             metric_titles = {
-                'in_degree': 'In-Degree Centrality',
-                'out_degree': 'Out-Degree Centrality',
-                'betweenness': 'Betweenness Centrality',
-                'closeness': 'Closeness Centrality'
+                'in_degree': '인기도 (In-Degree)',
+                'out_degree': '활동성 (Out-Degree)',
+                'betweenness': '매개 중심성 (Betweenness)',
+                'closeness': '근접 중심성 (Closeness)',
+                'eigenvector': '영향력 중심성 (Eigenvector)'
             }
             title = metric_titles.get(metric, metric)
-            ax.set_title(f'Top {top_n} Students - {title}', fontsize=14, pad=20)
+            ax.set_title(f'상위 {top_n}명 학생 - {title}', fontsize=14, pad=20)
             
             # 값 주석 추가
             for bar in bars:
@@ -1376,20 +1377,6 @@ class NetworkVisualizer:
             
             # 레이아웃 조정
             plt.tight_layout()
-            
-            # 한글-영문 매핑 표 표시 (UI 텍스트는 한글 사용)
-            st.markdown("### 📋 학생 이름 매핑 참조표")
-            st.write("그래프는 영문으로 표시되지만, 아래 표에서 원래 한글 이름을 확인하실 수 있습니다.")
-            
-            # 데이터프레임으로 표시
-            mapping_df = pd.DataFrame({
-                "그래프 표시 이름": list(name_mapping.values()),
-                "원래 한글 이름": list(name_mapping.keys())
-            })
-            
-            # name_mapping이 비어있지 않으면 표시
-            if not mapping_df.empty:
-                st.dataframe(mapping_df)
             
             return fig
             
@@ -1462,14 +1449,32 @@ class NetworkVisualizer:
                 logger.error(f"커뮤니티 그룹화 중 오류: {str(e)}")
                 return pd.DataFrame(columns=["그룹 ID", "학생 수", "주요 학생"])
             
+            # 학생 ID를 실제 이름으로 변환하는 함수
+            def get_real_student_name(student_id):
+                # 1. analyzer의 name_mapping 사용 (ID -> 이름)
+                if hasattr(self, 'analyzer') and hasattr(self.analyzer, 'name_mapping') and student_id in self.analyzer.name_mapping:
+                    return self.analyzer.name_mapping[student_id]
+                # 2. analyzer의 reverse_romanized 사용 (로마자 -> 한글)
+                elif hasattr(self, 'analyzer') and hasattr(self.analyzer, 'reverse_romanized') and student_id in self.analyzer.reverse_romanized:
+                    return self.analyzer.reverse_romanized[student_id]
+                # 3. 자체 original_names 매핑 사용
+                elif hasattr(self, 'original_names') and student_id in self.original_names:
+                    return self.original_names[student_id]
+                # 4. 변환 실패 시 원래 ID 그대로 사용
+                else:
+                    return str(student_id)
+            
             # 결과 데이터 생성
             result_data = []
             for comm_id, members in community_groups.items():
                 # 학생 수
                 student_count = len(members)
                 
+                # 학생 ID를 실제 이름으로 변환
+                real_name_members = [get_real_student_name(student_id) for student_id in members]
+                
                 # 주요 학생 (최대 5명)
-                top_students = ', '.join(members[:5])
+                top_students = ', '.join(real_name_members[:5])
                 if student_count > 5:
                     top_students += ', ...'
                 
