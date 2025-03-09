@@ -951,65 +951,103 @@ class NetworkVisualizer:
             # 네트워크 객체 생성
             net = Network(height=height, width=width, directed=True, notebook=False)
             
-            # 사용자 정의 옵션 설정
+            # 사용자 정의 옵션 설정 - 최적화된 설정으로 교체
             net.set_options("""
             {
               "nodes": {
                 "font": {
-                  "size": 15,
-                  "face": "Tahoma",
-                  "color": "#333333"
+                  "size": 16,
+                  "face": "Noto Sans KR, Malgun Gothic, sans-serif",
+                  "color": "#333333",
+                  "strokeWidth": 2,
+                  "strokeColor": "#ffffff"
                 },
                 "borderWidth": 2,
-                "borderWidthSelected": 3,
-                "shadow": true
+                "borderWidthSelected": 4,
+                "shadow": true,
+                "shape": "dot",
+                "scaling": {
+                  "min": 10,
+                  "max": 30,
+                  "label": {
+                    "enabled": true,
+                    "min": 12,
+                    "max": 18
+                  }
+                }
               },
               "edges": {
                 "color": {
-                  "color": "#88888888",
+                  "color": "#606060",
                   "highlight": "#2196F3",
+                  "hover": "#009688",
                   "inherit": false
                 },
                 "smooth": {
-                  "type": "continuous",
-                  "forceDirection": "none"
+                  "enabled": true,
+                  "type": "dynamic",
+                  "roundness": 0.5
                 },
                 "font": {
-                  "face": "Tahoma"
+                  "face": "Noto Sans KR, Malgun Gothic, sans-serif",
+                  "size": 12,
+                  "color": "#333333",
+                  "strokeWidth": 2,
+                  "strokeColor": "#ffffff",
+                  "align": "horizontal"
                 },
-                "width": 1,
-                "selectionWidth": 2,
+                "width": 2,
+                "selectionWidth": 3,
+                "hoverWidth": 2,
                 "arrows": {
                   "to": {
                     "enabled": true,
-                    "scaleFactor": 0.5
+                    "scaleFactor": 0.6,
+                    "type": "arrow"
                   }
                 }
               },
               "interaction": {
+                "dragNodes": true,
+                "dragView": true,
+                "hideEdgesOnDrag": false,
+                "hideNodesOnDrag": false,
+                "hover": true,
                 "navigationButtons": true,
+                "multiselect": true,
+                "selectable": true,
+                "selectConnectedEdges": true,
+                "hoverConnectedEdges": true,
+                "zoomView": true,
                 "keyboard": {
                   "enabled": true,
                   "bindToWindow": false
-                },
-                "hover": true,
-                "multiselect": true,
-                "tooltipDelay": 100
+                }
               },
               "physics": {
                 "enabled": true,
                 "stabilization": {
                   "enabled": true,
                   "iterations": 1000,
-                  "updateInterval": 100,
+                  "updateInterval": 50,
                   "fit": true
                 },
                 "barnesHut": {
-                  "gravitationalConstant": -3000,
-                  "centralGravity": 0.3,
-                  "springLength": 120,
-                  "springConstant": 0.02,
-                  "damping": 0.09
+                  "gravitationalConstant": -5000,
+                  "centralGravity": 0.1,
+                  "springLength": 150,
+                  "springConstant": 0.04,
+                  "damping": 0.09,
+                  "avoidOverlap": 0.8
+                },
+                "repulsion": {
+                  "nodeDistance": 200
+                }
+              },
+              "layout": {
+                "improvedLayout": true,
+                "hierarchical": {
+                  "enabled": false
                 }
               }
             }
@@ -1040,25 +1078,26 @@ class NetworkVisualizer:
                 if 'betweenness' in metrics:
                     node_colors = metrics['betweenness']
             
+            # 커뮤니티 색상 맵 (최대 10개 커뮤니티)
+            color_map = ["#3366CC", "#DC3912", "#FF9900", "#109618", "#990099", "#0099C6", "#DD4477", "#66AA00", "#B82E2E", "#316395"]
+            
             # 노드 추가
             for node in G.nodes():
                 # 노드 속성 가져오기
                 node_attr = G.nodes[node]
                 
                 # 기본 크기 및 색상 설정
-                size = 15
+                size = 20
                 color = "#97C2FC"
                 
                 # 노드 크기 계산 (인기도 기반)
                 if node in node_sizes:
-                    # 노드 크기 정규화 (15-30)
+                    # 노드 크기 정규화 (20-40)
                     size = node_sizes.get(node, 0.5)
-                    size = 15 + min(15, size * 30)
+                    size = 20 + min(20, size * 30)
                 
                 # 노드 색상 계산
                 if communities and node in communities:
-                    # 커뮤니티 색상 맵 (최대 10개 커뮤니티)
-                    color_map = ["#3366CC", "#DC3912", "#FF9900", "#109618", "#990099", "#0099C6", "#DD4477", "#66AA00", "#B82E2E", "#316395"]
                     try:
                         comm = communities[node]
                         if isinstance(comm, (int, float)) and 0 <= comm < len(color_map):
@@ -1113,18 +1152,79 @@ class NetworkVisualizer:
                     title += f"받은 선택: {in_edges}명\n"
                     title += f"한 선택: {out_edges}명"
                     
-                    # 노드 추가
+                    # 노드 추가 - 향상된 속성 설정
                     net.add_node(
                         node, 
                         label=node_attr.get('label', node), 
                         title=title,
                         color=color, 
-                        size=size
+                        size=size,
+                        borderWidth=2,
+                        borderWidthSelected=4,
+                        shadow=True
                     )
                 except Exception as e:
                     logger.warning(f"노드 {node} 추가 중 오류: {str(e)}")
                     # 기본 설정으로 노드 추가
                     net.add_node(node, label=str(node))
+            
+            # 엣지 추가 - 관계 표현 강화
+            for u, v, data in G.edges(data=True):
+                try:
+                    # 엣지 속성 설정
+                    width = 2  # 기본 너비
+                    title = f"{u}에서 {v}로 연결"
+                    
+                    # 가중치가 있는 경우 반영
+                    if 'weight' in data:
+                        width = data['weight'] * 2
+                        title += f"\n가중치: {data['weight']}"
+                    
+                    # 관계 유형이 있는 경우 반영
+                    if 'type' in data:
+                        title += f"\n관계: {data['type']}"
+                    elif 'relationship' in data:
+                        title += f"\n관계: {data['relationship']}"
+                    
+                    # 엣지 색상 설정 - 두 노드의 커뮤니티에 따라 색상 설정
+                    edge_color = "#606060"  # 기본 색상
+                    
+                    if communities and u in communities and v in communities:
+                        comm_u = communities[u]
+                        comm_v = communities[v]
+                        
+                        # 같은 커뮤니티면 해당 커뮤니티 색상 사용
+                        if comm_u == comm_v and isinstance(comm_u, (int, float)) and 0 <= comm_u < len(color_map):
+                            edge_color = color_map[int(comm_u)]
+                            # 투명도 적용 (엣지는 노드보다 약간 투명하게)
+                            if edge_color.startswith('#'):
+                                edge_color = edge_color + '99'  # 16진수 색상에 투명도 추가
+                    
+                    # 엣지 추가
+                    net.add_edge(
+                        u, v, 
+                        title=title, 
+                        width=width, 
+                        color=edge_color,
+                        smooth={'enabled': True, 'type': 'dynamic'}
+                    )
+                    
+                except Exception as e:
+                    logger.warning(f"엣지 {u}-{v} 추가 중 오류: {str(e)}")
+                    # 기본 설정으로 엣지 추가
+                    net.add_edge(u, v)
+            
+            # 레이아웃 설정
+            if layout == "kamada_kawai":
+                net.barnes_hut(gravity=-5000, central_gravity=0.1, spring_length=150)
+            elif layout == "fruchterman":
+                net.repulsion(node_distance=200, central_gravity=0.2, spring_length=200)
+            elif layout == "force":
+                net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=100)
+            elif layout == "circular":
+                # Circular 레이아웃은 PyVis에서 직접 지원하지 않음
+                # 노드들을 원형으로 배치할 수 있는 초기 위치 계산
+                pass
             
             return net
         
