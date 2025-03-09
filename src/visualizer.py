@@ -957,45 +957,45 @@ class NetworkVisualizer:
             if layout == "kamada_kawai":
                 physics_options = {
                     "barnesHut": {
-                        "gravitationalConstant": -5000,
-                        "centralGravity": 0.1,
-                        "springLength": 150,
-                        "springConstant": 0.04,
+                        "gravitationalConstant": -6000,
+                        "centralGravity": 0.2,
+                        "springLength": 160,
+                        "springConstant": 0.05,
                         "damping": 0.09,
-                        "avoidOverlap": 0.8
+                        "avoidOverlap": 1.0
                     }
                 }
             elif layout == "fruchterman":
                 physics_options = {
                     "repulsion": {
-                        "nodeDistance": 200,
-                        "centralGravity": 0.2,
-                        "springLength": 200,
-                        "springConstant": 0.05,
+                        "nodeDistance": 220,
+                        "centralGravity": 0.15,
+                        "springLength": 220,
+                        "springConstant": 0.06,
                         "damping": 0.09
                     }
                 }
             elif layout == "force":
                 physics_options = {
                     "forceAtlas2Based": {
-                        "gravitationalConstant": -50,
-                        "centralGravity": 0.01,
-                        "springLength": 100,
-                        "springConstant": 0.08,
+                        "gravitationalConstant": -60,
+                        "centralGravity": 0.015,
+                        "springLength": 120,
+                        "springConstant": 0.1,
                         "damping": 0.4,
-                        "avoidOverlap": 0.5
+                        "avoidOverlap": 0.8
                     }
                 }
             else:
                 # 기본 물리 엔진 설정
                 physics_options = {
                     "barnesHut": {
-                        "gravitationalConstant": -3000,
-                        "centralGravity": 0.3,
-                        "springLength": 120,
-                        "springConstant": 0.04,
+                        "gravitationalConstant": -4000,
+                        "centralGravity": 0.2,
+                        "springLength": 140,
+                        "springConstant": 0.05,
                         "damping": 0.09,
-                        "avoidOverlap": 0.5
+                        "avoidOverlap": 0.8
                     }
                 }
             
@@ -1005,29 +1005,33 @@ class NetworkVisualizer:
                     "font": {
                         "size": 16,
                         "face": "Noto Sans KR, Malgun Gothic, sans-serif",
-                        "color": "#333333",
-                        "strokeWidth": 2,
-                        "strokeColor": "#ffffff"
+                        "color": "#000000",  # 더 어두운 글자색으로 가독성 향상
+                        "strokeWidth": 3,  # 테두리 두께 증가
+                        "strokeColor": "#ffffff"  # 흰색 테두리로 대비 강화
                     },
-                    "borderWidth": 2,
-                    "borderWidthSelected": 4,
+                    "borderWidth": 3,  # 테두리 두께 증가
+                    "borderWidthSelected": 5,  # 선택 시 테두리 두께 증가
                     "shadow": True,
                     "shape": "dot",
                     "scaling": {
-                        "min": 10,
-                        "max": 30,
+                        "min": 15,  # 최소 크기 증가
+                        "max": 40,  # 최대 크기 증가
                         "label": {
                             "enabled": True,
-                            "min": 12,
-                            "max": 18
+                            "min": 14,  # 최소 라벨 크기 증가
+                            "max": 20   # 최대 라벨 크기 증가
                         }
+                    },
+                    "color": {
+                        "highlight": "#FF5722",  # 강조색 변경 (선명한 주황색)
+                        "hover": "#4CAF50"       # 호버색 변경 (선명한 녹색)
                     }
                 },
                 "edges": {
                     "color": {
-                        "color": "#606060",
-                        "highlight": "#2196F3",
-                        "hover": "#009688",
+                        "color": "#444444",  # 기본 엣지 색상 어둡게 변경
+                        "highlight": "#FF5722",  # 강조색 변경 (선명한 주황색)
+                        "hover": "#4CAF50",      # 호버색 변경 (선명한 녹색)
                         "inherit": False
                     },
                     "smooth": {
@@ -1037,15 +1041,15 @@ class NetworkVisualizer:
                     },
                     "font": {
                         "face": "Noto Sans KR, Malgun Gothic, sans-serif",
-                        "size": 12,
-                        "color": "#333333",
-                        "strokeWidth": 2,
-                        "strokeColor": "#ffffff",
+                        "size": 13,  # 폰트 크기 증가
+                        "color": "#000000",  # 더 어두운 글자색
+                        "strokeWidth": 3,  # 테두리 두께 증가
+                        "strokeColor": "#ffffff",  # 흰색 테두리
                         "align": "horizontal"
                     },
-                    "width": 2,
-                    "selectionWidth": 3,
-                    "hoverWidth": 2,
+                    "width": 2.5,  # 기본 너비 증가
+                    "selectionWidth": 4,  # 선택 시 너비 증가
+                    "hoverWidth": 3.5,  # 호버 시 너비 증가
                     "arrows": {
                         "to": {
                             "enabled": True,
@@ -1069,15 +1073,18 @@ class NetworkVisualizer:
                     "keyboard": {
                         "enabled": True,
                         "bindToWindow": False
-                    }
+                    },
+                    "tooltipDelay": 100  # 툴팁 표시 지연 시간 단축
                 },
                 "physics": {
                     "enabled": True,
                     "stabilization": {
                         "enabled": True,
-                        "iterations": 1000,
-                        "updateInterval": 50,
-                        "fit": True
+                        "iterations": 1500,  # 안정화 반복 횟수 증가
+                        "updateInterval": 25,  # 업데이트 간격 감소
+                        "fit": True,
+                        "onlyDynamicEdges": False,
+                        "animationEnabled": True  # 안정화 애니메이션 활성화
                     },
                     **physics_options  # 레이아웃별 물리 설정 추가
                 },
@@ -1096,7 +1103,7 @@ class NetworkVisualizer:
             communities = None
             if hasattr(self, 'communities') and self.communities:
                 communities = self.communities
-            elif hasattr(self.analyzer, 'communities') and self.analyzer.communities:
+            elif hasattr(self.analyzer, 'communities'):
                 communities = self.analyzer.communities
             
             # 그래프 데이터 가져오기
@@ -1117,8 +1124,8 @@ class NetworkVisualizer:
                 if 'betweenness' in metrics:
                     node_colors = metrics['betweenness']
             
-            # 커뮤니티 색상 맵 (최대 10개 커뮤니티)
-            color_map = ["#3366CC", "#DC3912", "#FF9900", "#109618", "#990099", "#0099C6", "#DD4477", "#66AA00", "#B82E2E", "#316395"]
+            # 커뮤니티 색상 맵 - 더 선명하고 대비가 높은 색상으로 변경
+            color_map = ["#3F51B5", "#E91E63", "#FFC107", "#009688", "#9C27B0", "#03A9F4", "#F44336", "#4CAF50", "#673AB7", "#FF5722"]
             
             # 노드 추가
             for node in G.nodes():
@@ -1131,9 +1138,9 @@ class NetworkVisualizer:
                 
                 # 노드 크기 계산 (인기도 기반)
                 if node in node_sizes:
-                    # 노드 크기 정규화 (20-40)
+                    # 노드 크기 정규화 (25-45)
                     size = node_sizes.get(node, 0.5)
-                    size = 20 + min(20, size * 30)
+                    size = 25 + min(20, size * 35)
                 
                 # 노드 색상 계산
                 if communities and node in communities:
@@ -1198,9 +1205,10 @@ class NetworkVisualizer:
                         title=title,
                         color=color, 
                         size=size,
-                        borderWidth=2,
-                        borderWidthSelected=4,
-                        shadow=True
+                        borderWidth=3,
+                        borderWidthSelected=5,
+                        shadow=True,
+                        font={'size': 16, 'color': '#000000', 'strokeWidth': 3, 'strokeColor': '#ffffff'}
                     )
                 except Exception as e:
                     logger.warning(f"노드 {node} 추가 중 오류: {str(e)}")
@@ -1245,7 +1253,9 @@ class NetworkVisualizer:
                         title=title, 
                         width=width, 
                         color=edge_color,
-                        smooth={'enabled': True, 'type': 'dynamic'}
+                        smooth={'enabled': True, 'type': 'dynamic'},
+                        selectionWidth=4,  # 선택 시 너비 증가
+                        hoverWidth=3       # 호버 시 너비 증가
                     )
                     
                 except Exception as e:
@@ -1253,10 +1263,338 @@ class NetworkVisualizer:
                     # 기본 설정으로 엣지 추가
                     net.add_edge(u, v)
             
+            # 향상된 네트워크 시각화 설정 적용
+            temp_path = "temp_network.html"
+            self.save_and_show_pyvis_network(net, filename=temp_path, height=height)
+            
             return net
         
         except Exception as e:
             logger.error(f"PyVis 네트워크 생성 중 오류: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+    
+    def save_and_show_pyvis_network(self, net, filename="network.html", height="600px", add_custom_js=True):
+        """PyVis 네트워크를 저장하고 추가 사용자 정의 스크립트 적용
+        
+        Args:
+            net (PyVis Network): 네트워크 객체
+            filename (str): 저장할 HTML 파일명
+            height (str): 그래프 높이
+            add_custom_js (bool): 사용자 정의 JS 추가 여부
+        
+        Returns:
+            str: HTML 문자열
+        """
+        try:
+            # 임시 파일로 저장
+            net.save_graph(filename)
+            
+            # HTML 읽기
+            with open(filename, 'r', encoding='utf-8') as f:
+                html = f.read()
+            
+            # 기본 스타일 업데이트
+            updated_style = """
+            <style>
+                #mynetwork {
+                    width: 100%;
+                    height: """+height+""";
+                    border: 1px solid #ddd;
+                    background-color: #f9f9f9;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    border-radius: 8px;
+                    margin: auto;
+                }
+                .vis-network:focus {
+                    outline: none;
+                }
+                .vis-manipulation {
+                    background-color: #f9f9f9 !important;
+                    border-radius: 6px !important;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+                }
+                .vis-button {
+                    background-color: #ffffff !important;
+                    border-radius: 50% !important;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+                    transition: all 0.3s ease !important;
+                }
+                .vis-button:hover {
+                    background-color: #f5f5f5 !important;
+                    transform: scale(1.05) !important;
+                }
+                .vis-tooltip {
+                    position: absolute;
+                    visibility: hidden;
+                    padding: 8px;
+                    white-space: pre-line;
+                    font-family: 'Noto Sans KR', sans-serif;
+                    font-size: 14px;
+                    color: #000;
+                    background-color: #fff;
+                    border-radius: 6px;
+                    border: 1px solid #ddd;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+                    max-width: 250px;
+                    line-height: 1.5;
+                    z-index: 9999;
+                }
+            </style>
+            """
+            
+            # 사용자 정의 스크립트 (클릭 효과 강화)
+            if add_custom_js:
+                custom_js = """
+                <script type="text/javascript">
+                    // 네트워크가 완전히 로드된 후 실행
+                    network.once("stabilizationIterationsDone", function() {
+                        // 안정화 완료 후 물리 엔진 비활성화 (더 부드러운 탐색을 위해)
+                        // network.setOptions({physics: false});
+                        console.log("네트워크 안정화 완료");
+                        
+                        // 기존 노드/엣지 스타일 저장
+                        let originalNodeStyles = {};
+                        let originalEdgeStyles = {};
+                        let highlightedNodes = new Set();
+                        let highlightedEdges = new Set();
+                        
+                        // 노드 클릭 이벤트 - 강화된 하이라이팅
+                        network.on("click", function(params) {
+                            // 클릭된 노드가 있는 경우
+                            if (params.nodes.length > 0) {
+                                // 이전 하이라이트 초기화
+                                resetHighlights();
+                                
+                                const selectedNode = params.nodes[0];
+                                // 연결된 노드 찾기
+                                const connectedNodes = network.getConnectedNodes(selectedNode);
+                                // 연결된 엣지 찾기
+                                const connectedEdges = network.getConnectedEdges(selectedNode);
+                                
+                                // 클릭된 노드 하이라이트
+                                highlightNode(selectedNode, "#FF5722", 6, 1.2);
+                                
+                                // 연결된 노드 하이라이트
+                                connectedNodes.forEach(node => {
+                                    highlightNode(node, "#4CAF50", 4, 1.1);
+                                });
+                                
+                                // 연결된 엣지 하이라이트
+                                connectedEdges.forEach(edge => {
+                                    highlightEdge(edge, "#FF5722", 3);
+                                });
+                                
+                                // 하이라이트 목록에 추가
+                                highlightedNodes.add(selectedNode);
+                                connectedNodes.forEach(node => highlightedNodes.add(node));
+                                connectedEdges.forEach(edge => highlightedEdges.add(edge));
+                                
+                                // 선택되지 않은 노드는 흐리게 표시
+                                fadeOtherNodes(highlightedNodes);
+                                fadeOtherEdges(highlightedEdges);
+                            } 
+                            // 배경 클릭 시 리셋
+                            else if (params.nodes.length === 0 && params.edges.length === 0) {
+                                resetAll();
+                            }
+                        });
+                        
+                        // 노드 하이라이트 함수
+                        function highlightNode(nodeId, color, borderWidth, scale) {
+                            // 원본 스타일 저장
+                            if (!originalNodeStyles[nodeId]) {
+                                const node = network.body.nodes[nodeId];
+                                if (node) {
+                                    originalNodeStyles[nodeId] = {
+                                        color: node.options.color,
+                                        borderWidth: node.options.borderWidth,
+                                        size: node.options.size
+                                    };
+                                }
+                            }
+                            
+                            // 하이라이트 적용
+                            network.body.nodes[nodeId].options.borderWidth = borderWidth;
+                            network.body.nodes[nodeId].options.borderWidthSelected = borderWidth + 2;
+                            network.body.nodes[nodeId].options.color = {
+                                background: network.body.nodes[nodeId].options.color.background,
+                                border: color,
+                                highlight: {
+                                    background: network.body.nodes[nodeId].options.color.background,
+                                    border: color
+                                }
+                            };
+                            // 크기 스케일 적용
+                            network.body.nodes[nodeId].options.size *= scale;
+                        }
+                        
+                        // 엣지 하이라이트 함수
+                        function highlightEdge(edgeId, color, width) {
+                            // 원본 스타일 저장
+                            if (!originalEdgeStyles[edgeId]) {
+                                const edge = network.body.edges[edgeId];
+                                if (edge) {
+                                    originalEdgeStyles[edgeId] = {
+                                        color: edge.options.color,
+                                        width: edge.options.width
+                                    };
+                                }
+                            }
+                            
+                            // 하이라이트 적용
+                            network.body.edges[edgeId].options.color = color;
+                            network.body.edges[edgeId].options.width = width;
+                        }
+                        
+                        // 다른 노드 페이드 아웃
+                        function fadeOtherNodes(highlightedNodes) {
+                            Object.keys(network.body.nodes).forEach(nodeId => {
+                                if (!highlightedNodes.has(nodeId)) {
+                                    // 원본 스타일 저장
+                                    if (!originalNodeStyles[nodeId]) {
+                                        const node = network.body.nodes[nodeId];
+                                        originalNodeStyles[nodeId] = {
+                                            color: node.options.color,
+                                            borderWidth: node.options.borderWidth,
+                                            size: node.options.size
+                                        };
+                                    }
+                                    
+                                    // 페이드 아웃 적용
+                                    const nodeObj = network.body.nodes[nodeId];
+                                    const bgColor = nodeObj.options.color.background;
+                                    
+                                    // 배경색에 투명도 적용
+                                    let bgRgba;
+                                    if (typeof bgColor === 'string' && bgColor.startsWith('rgba')) {
+                                        // 이미 rgba 형식이면 투명도만 변경
+                                        bgRgba = bgColor.replace(/rgba\((.*?),(.*?),(.*?),.*?\)/, 'rgba($1,$2,$3,0.3)');
+                                    } else if (typeof bgColor === 'string' && bgColor.startsWith('rgb')) {
+                                        // rgb 형식이면 rgba로 변환
+                                        bgRgba = bgColor.replace(/rgb\((.*?),(.*?),(.*?)\)/, 'rgba($1,$2,$3,0.3)');
+                                    } else if (typeof bgColor === 'string' && bgColor.startsWith('#')) {
+                                        // HEX 색상 코드이면 rgba로 변환
+                                        const r = parseInt(bgColor.slice(1, 3), 16);
+                                        const g = parseInt(bgColor.slice(3, 5), 16);
+                                        const b = parseInt(bgColor.slice(5, 7), 16);
+                                        bgRgba = `rgba(${r},${g},${b},0.3)`;
+                                    } else {
+                                        // 기본값
+                                        bgRgba = 'rgba(200,200,200,0.3)';
+                                    }
+                                    
+                                    nodeObj.options.color = {
+                                        background: bgRgba,
+                                        border: 'rgba(150,150,150,0.3)',
+                                        highlight: nodeObj.options.color.highlight
+                                    };
+                                    
+                                    // 크기 감소
+                                    nodeObj.options.size *= 0.9;
+                                }
+                            });
+                        }
+                        
+                        // 다른 엣지 페이드 아웃
+                        function fadeOtherEdges(highlightedEdges) {
+                            Object.keys(network.body.edges).forEach(edgeId => {
+                                if (!highlightedEdges.has(edgeId)) {
+                                    // 원본 스타일 저장
+                                    if (!originalEdgeStyles[edgeId]) {
+                                        const edge = network.body.edges[edgeId];
+                                        originalEdgeStyles[edgeId] = {
+                                            color: edge.options.color,
+                                            width: edge.options.width
+                                        };
+                                    }
+                                    
+                                    // 페이드 아웃 적용
+                                    network.body.edges[edgeId].options.color = 'rgba(200,200,200,0.2)';
+                                    network.body.edges[edgeId].options.width = 0.8;
+                                }
+                            });
+                        }
+                        
+                        // 하이라이트 초기화
+                        function resetHighlights() {
+                            // 하이라이트된 노드 스타일 복원
+                            highlightedNodes.forEach(nodeId => {
+                                if (originalNodeStyles[nodeId] && network.body.nodes[nodeId]) {
+                                    network.body.nodes[nodeId].options.color = originalNodeStyles[nodeId].color;
+                                    network.body.nodes[nodeId].options.borderWidth = originalNodeStyles[nodeId].borderWidth;
+                                    network.body.nodes[nodeId].options.size = originalNodeStyles[nodeId].size;
+                                }
+                            });
+                            
+                            // 하이라이트된 엣지 스타일 복원
+                            highlightedEdges.forEach(edgeId => {
+                                if (originalEdgeStyles[edgeId] && network.body.edges[edgeId]) {
+                                    network.body.edges[edgeId].options.color = originalEdgeStyles[edgeId].color;
+                                    network.body.edges[edgeId].options.width = originalEdgeStyles[edgeId].width;
+                                }
+                            });
+                            
+                            // 하이라이트 목록 초기화
+                            highlightedNodes.clear();
+                            highlightedEdges.clear();
+                        }
+                        
+                        // 모든 스타일 초기화
+                        function resetAll() {
+                            // 모든 노드 스타일 복원
+                            Object.keys(originalNodeStyles).forEach(nodeId => {
+                                if (network.body.nodes[nodeId]) {
+                                    network.body.nodes[nodeId].options.color = originalNodeStyles[nodeId].color;
+                                    network.body.nodes[nodeId].options.borderWidth = originalNodeStyles[nodeId].borderWidth;
+                                    network.body.nodes[nodeId].options.size = originalNodeStyles[nodeId].size;
+                                }
+                            });
+                            
+                            // 모든 엣지 스타일 복원
+                            Object.keys(originalEdgeStyles).forEach(edgeId => {
+                                if (network.body.edges[edgeId]) {
+                                    network.body.edges[edgeId].options.color = originalEdgeStyles[edgeId].color;
+                                    network.body.edges[edgeId].options.width = originalEdgeStyles[edgeId].width;
+                                }
+                            });
+                            
+                            // 하이라이트 목록 초기화
+                            highlightedNodes.clear();
+                            highlightedEdges.clear();
+                            
+                            // 원본 스타일 저장소 초기화
+                            originalNodeStyles = {};
+                            originalEdgeStyles = {};
+                            
+                            // 네트워크 리드로우
+                            network.redraw();
+                        }
+                    });
+                </script>
+                """
+                
+                # 필요한 머리글/바닥글 추가
+                head_end = "</head>"
+                body_end = "</body>"
+                
+                # 스타일 추가
+                if head_end in html:
+                    html = html.replace(head_end, updated_style + head_end)
+                
+                # 사용자 정의 스크립트 추가
+                if body_end in html and add_custom_js:
+                    html = html.replace(body_end, custom_js + body_end)
+            
+            # 변경된 HTML 저장
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(html)
+            
+            return html
+            
+        except Exception as e:
+            logger.error(f"PyVis 네트워크 저장 중 오류: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
             return None
