@@ -325,7 +325,7 @@ class APIManager:
             genai.configure(api_key=self.current_api_key)
             
             # 모델 선택
-            model = genai.GenerativeModel('gemini-1.5-pro')
+            model = genai.GenerativeModel('gemini-2.5-pro')
             
             # 생성 요청
             response = model.generate_content(prompt)
