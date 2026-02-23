@@ -2,6 +2,15 @@
 
 학급 관계 네트워크 분석 시스템(Class-SNA)은 교사가 수집한 학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 자동 변환하여 시각화하는 웹 애플리케이션입니다.
 
+## Class-SNA 2.0 출시 안내
+
+Class-SNA는 현재 **2.0**으로 업데이트되었습니다.  
+기존 v1.0 저장소는 유지되며, 최신 버전은 아래 링크에서 확인할 수 있습니다.
+
+- Class-SNA v1.0 (현재 저장소): https://github.com/techkwon/Class-SNA
+- Class-SNA v2.0 저장소: https://github.com/techkwon/Class-SNA2
+- Class-SNA 2.0 데모: https://class-sna-2.vercel.app/
+
 ## 주요 기능
 
 - 구글 시트 공유 링크를 통한 설문 데이터 가져오기
