@@ -16,6 +16,7 @@ from src.utils import set_streamlit_page_config, show_footer, check_and_create_a
 
 # 앱 버전 정보
 APP_VERSION = "1.0"
+CLASS_SNA_2_URL = "https://class-sna-2.vercel.app/"
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -617,6 +618,12 @@ def main():
         
         # 설명 텍스트
         st.markdown("학생 간 관계 설문조사 데이터를 소셜 네트워크 분석(SNA) 그래프로 변환하여 시각화합니다. 구글 시트 공유 링크를 입력하거나 엑셀 데이터를 선택하세요.")
+        
+        # 출시 공지
+        st.info(
+            f"🚀 Class-SNA 2.0이 출시되었습니다. "
+            f"최신 버전 사용: [Class-SNA 2.0 바로가기]({CLASS_SNA_2_URL})"
+        )
         
         # 페이지 라우팅 - 세션 상태 속성 접근 전에 안전하게 확인
         try:

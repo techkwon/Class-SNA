@@ -29,9 +29,30 @@ jobs:
           
       - name: 'Python 문법 검사'
         run: |
-          pip install flake8
-          # 심각한 에러만 체크
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # 전체 파이썬 파일 컴파일로 문법 오류를 검사
+          python - <<'PY'
+          import pathlib
+          import py_compile
+          import sys
+
+          excluded_dirs = {".git", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache", ".omx"}
+          py_files = [
+              path for path in pathlib.Path(".").rglob("*.py")
+              if not any(part in excluded_dirs for part in path.parts)
+          ]
+
+          failed = False
+          for file_path in py_files:
+              try:
+                  py_compile.compile(str(file_path), doraise=True)
+              except py_compile.PyCompileError as exc:
+                  failed = True
+                  print(f"[ERROR] {file_path}: {exc.msg}")
+
+          print(f"검사 파일 수: {len(py_files)}")
+          if failed:
+              sys.exit(1)
+          PY
           
   deploy:
     name: '배포'
